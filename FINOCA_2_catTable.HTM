@@ -72,7 +72,10 @@ footer{color:var(--mut);font-size:11px;line-height:1.6;border-top:1px solid var(
 <div class="tabs" id="tabs"></div>
 <div id="view"></div>
 <div id="catSection" style="padding:0 18px 10px"></div>
+<div id="catAdsSection" style="padding:0 18px 10px"></div>
 <div id="catChartSection" style="padding:0 18px 40px"></div>
+<div id="catDistSection" style="padding:0 18px 10px"></div>
+<div id="catAsinSection" style="padding:0 18px 40px"></div>
 </div>
 <footer><div style="text-align:center;color:var(--mut);font-size:11px;padding:8px 0">Datos: MerchantSpring (Amazon Vendor) · Publicidad: Pacvue · Clasificación: Excel Familias · Agencia ROICOS</div></footer>
 <script>
@@ -403,19 +406,10 @@ function renderCountry(cc){
   </div>`;
   const cmBtn=`<div class="chart-toggle"><button class="${F.chartMode==='mensual'?'on':''}" onclick="setChartMode('mensual')">Mensual</button><button class="${F.chartMode==='acumulado'?'on':''}" onclick="setChartMode('acumulado')">Acumulado</button></div>`;
   html+=`<div class="panel"><h3>Evolución mensual · ${metL} ${measL} <span>(${cur})</span>${cmBtn}</h3><div class="chartbox"><canvas id="c1"></canvas></div></div>`;
-  const subLabel=SUBS.find(s=>s[0]===dim)[1];
-  const tblNote=F.period==='ytd'&&!scoped?'Columna 2025 = <b>mismas referencias</b> (like-for-like).':'<span class="est">~</span> Valores estimados por proporción del período sobre YTD.';
-  html+=`<div class="flex2">
-    <div class="panel"><h3>Desglose · ${subLabel} <span>(${pL})</span></h3><div class="chartbox"><canvas id="c2"></canvas></div></div>
-    <div class="panel"><h3>Tabla · ${subLabel} <span>(${pL} vs ${pC})</span></h3><div style="max-height:320px;overflow:auto">${tableHtml(cc,dispRows,dim)}</div><div class="muted" style="font-size:11px;margin-top:6px">${tblNote}</div></div></div>`;
-  html+=asinPanel(cc);
-  html+=`<div class="panel"><h3>Distribución por categorías <span>(${pL} · clic en "Desglose por" para cambiar dimensión)</span></h3><div id="pieSec" style="padding:4px 0"></div></div>`;
+
   v.innerHTML=html;
   drawMonthly(cc,scoped?totRec:null,scoped,scaleC,scaleP);
-  drawBreak(cc,dispRows,cur);
   hookRows(cc,dim);
-  hookSearch(cc,scaleC,scaleP);
-  drawAllPies(cc,scaleC);
 }
 
 function tableHtml(cc,rows,dim){
@@ -859,7 +853,191 @@ function renderCatChart(labels,curData,prevData,colors,pL,pC,curLabel){
   });
 }
 var _origRender=render;
-render=function(){_origRender();renderCatTable();};
+render=function(){
+  _origRender();
+  renderCatTable();
+  renderCatAdsTable();
+  var _cc2=F.tab==='GLOBAL'?null:F.tab;
+  var _pL2=periodLabel();
+  var _cdSec=document.getElementById('catDistSection');
+  var _caSec=document.getElementById('catAsinSection');
+  if(_cdSec){
+    _cdSec.innerHTML='<div class="panel"><h3>Distribuci\xf3n por categor\xedas <span>('+_pL2+' \xb7 clic en \u201cDesglose por\u201d para cambiar dimensi\xf3n)</span></h3><div id="pieSec" style="padding:4px 0"></div></div>';
+    if(_cc2) drawAllPies(_cc2,null);
+  }
+  if(_caSec&&_cc2){
+    _caSec.innerHTML=asinPanel(_cc2);
+    var _pTot3=periodTotals(_cc2);
+    var _ytdC3=ytdCo(_cc2,F.metric,'cur');
+    var _ytdP3=ytdCo(_cc2,F.metric,'prev');
+    var _scC3=_ytdC3>0?_pTot3.c/_ytdC3:1;
+    var _scP3=_ytdP3>0?_pTot3.p/_ytdP3:1;
+    hookSearch(_cc2,_scC3,_scP3);
+  }
+};
+
+function renderCatAdsTable(){
+  var sec=document.getElementById('catAdsSection');
+  if(!sec)return;
+  var isGlobal=F.tab==='GLOBAL';
+  var countries=isGlobal?DATA.countries:[F.tab];
+  var pL=periodLabel();
+  // Grand revenue total for proportional allocation
+  var grandRevC=0;
+  countries.forEach(function(cc2){
+    var fxC=isGlobal?DATA.fx[curOf(cc2)]:1;
+    var pTot=periodTotals(cc2);
+    var ytdC=ytdCo(cc2,F.metric,'cur');
+    var sc=ytdC>0?pTot.c/ytdC:1;
+    if(DATA.rec[cc2]){
+      DATA.rec[cc2].forEach(function(r){
+        grandRevC+=recVal(r,'cur')*(F.metric==='si'?siFactor(cc2):1)*sc*fxC;
+      });
+    }
+  });
+  // Grand adv totals (sum all months = YTD)
+  var grandAdvSpend=0,grandAdvSales=0;
+  countries.forEach(function(cc2){
+    if(!DATA.adv||!DATA.adv[cc2])return;
+    DATA.adv[cc2].forEach(function(r){grandAdvSpend+=r[0];grandAdvSales+=r[1];});
+  });
+  var h='<div class="panel" style="margin-top:4px">'
+    +'<h3>Categor\u00edas \u00b7 An\u00e1lisis Ads <span>('+pL+' \u00b7 <span class="est">\u223c estimado por proporci\u00f3n</span>)</span></h3>'
+    +'<div style="overflow-x:auto"><table>'
+    +'<thead><tr>'
+    +'<th style="text-align:left;min-width:120px">Categor\u00eda</th>'
+    +'<th style="text-align:left;min-width:140px">Subcategor\u00eda</th>'
+    +'<th style="min-width:110px">Inversi\u00f3n (\u20ac)</th>'
+    +'<th style="min-width:110px">Ventas Ads (\u20ac)</th>'
+    +'<th style="min-width:70px">ACoS</th>'
+    +'<th style="min-width:70px">ROAS</th>'
+    +'</tr></thead><tbody>';
+  for(var gi=0;gi<CAT_REPORT_GROUPS.length;gi++){
+    var g=CAT_REPORT_GROUPS[gi];
+    var subR=[];
+    var totGrpRev=0;
+    for(var si2=0;si2<g.subs.length;si2++){
+      var agg=_catAgg(g.subs[si2].match,countries,isGlobal);
+      var sh=grandRevC>0?agg.cur/grandRevC:0;
+      var sp=grandAdvSpend*sh;
+      var sa=grandAdvSales*sh;
+      subR.push({label:g.subs[si2].label,spend:sp,sales:sa});
+      totGrpRev+=agg.cur;
+    }
+    var grpShare=grandRevC>0?totGrpRev/grandRevC:0;
+    var grpSpend=grandAdvSpend*grpShare;
+    var grpSales=grandAdvSales*grpShare;
+    var grpAcos=grpSales>0?grpSpend/grpSales*100:0;
+    var grpRoas=grpSpend>0?grpSales/grpSpend:0;
+    var groupId='catadsgrp_'+g.id;
+    h+='<tr data-sid="'+groupId+'" style="background:var(--panel2);cursor:pointer" onclick="catToggle(this.dataset.sid)">'
+      +'<td style="font-weight:700;color:'+g.color+';font-size:11px;text-transform:uppercase;letter-spacing:.5px">\u25b8 '+g.label+'</td>'
+      +'<td style="color:var(--mut);font-size:11px;font-style:italic">clic para subcategor\u00edas</td>'
+      +'<td style="font-weight:700">'+fmtN(Math.round(grpSpend))+' \u20ac</td>'
+      +'<td>'+fmtN(Math.round(grpSales))+' \u20ac</td>'
+      +'<td>'+(grpAcos>0?grpAcos.toFixed(1)+'%':'-')+'</td>'
+      +'<td>'+(grpRoas>0?grpRoas.toFixed(2)+'x':'-')+'</td></tr>';
+    h+='<tr id="'+groupId+'" style="display:none"><td colspan="6" style="padding:0">'
+      +'<table style="width:100%"><tbody>';
+    for(var si4=0;si4<subR.length;si4++){
+      var sb=subR[si4];
+      if(!sb.spend&&!sb.sales)continue;
+      var sbAcos=sb.sales>0?sb.spend/sb.sales*100:0;
+      var sbRoas=sb.spend>0?sb.sales/sb.spend:0;
+      h+='<tr style="background:var(--bg)">'
+        +'<td style="padding-left:28px;color:var(--acc);font-size:12px;font-weight:600" colspan="2">'+sb.label+'</td>'
+        +'<td>'+fmtN(Math.round(sb.spend))+' \u20ac</td>'
+        +'<td>'+fmtN(Math.round(sb.sales))+' \u20ac</td>'
+        +'<td>'+(sbAcos>0?sbAcos.toFixed(1)+'%':'-')+'</td>'
+        +'<td>'+(sbRoas>0?sbRoas.toFixed(2)+'x':'-')+'</td></tr>';
+    }
+    h+='</tbody></table></td></tr>';
+  }
+  h+='</tbody></table></div>'
+    +'<p style="margin:6px 0 0;font-size:11px;color:var(--mut)">'
+    +'<span class="est">\u223c</span> Inversi\u00f3n y Ventas Ads estimadas por proporci\u00f3n de facturaci\u00f3n YTD por categor\u00eda.</p>'
+    +'</div>';
+  sec.innerHTML=h;
+}
+
+var _drawAllPies=drawAllPies;
+drawAllPies=function(cc,scaleC){
+  var pL=periodLabel();
+  var cur=curOf(cc);
+  var countries=[cc];
+  // Main data from CAT_REPORT_GROUPS
+  var mLabels=[],mValues=[],mColors=[];
+  CAT_REPORT_GROUPS.forEach(function(g){
+    var matchAll=function(c){return g.subs.some(function(s){return s.match(c);});};
+    var agg=_catAgg(matchAll,countries,false);
+    if(agg.cur>0){mLabels.push(g.label);mValues.push(agg.cur);mColors.push(g.color);}
+  });
+  var tot=mValues.reduce(function(s,v){return s+v;},0);
+  if(!tot)return;
+  // Sub-dim toggle
+  var dims=[['cat','Subcategor\u00eda'],['id','Idioma'],['dp','Interior'],['fo','Formato'],['co','Color']];
+  var dimBtns=dims.map(function(d){return '<button style="background:'+(F.pieDim===d[0]?'var(--acc2)':'var(--panel2)')+';color:'+(F.pieDim===d[0]?'#06251f':'var(--mut)')+';border:1px solid var(--line);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px" onclick="setPieDim(\''+d[0]+'\')">'+d[1]+'</button>';}).join('');
+  // Legend
+  var legendHtml='<div style="display:flex;flex-direction:column;gap:6px;font-size:12px">';
+  mLabels.forEach(function(label,i){
+    var p=((mValues[i]/tot)*100).toFixed(1);
+    legendHtml+='<div style="display:flex;align-items:center;gap:7px"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:'+mColors[i]+';flex-shrink:0"></span><span style="color:var(--ink)">'+label+'</span><span style="color:var(--mut);margin-left:auto">'+fmtN(mValues[i])+' ('+p+'%)</span></div>';
+  });
+  legendHtml+='</div>';
+  // Per-group scale factors
+  var f=F.metric==='si'?siFactor(cc):1;
+  var pTotSC=periodTotals(cc);
+  var ytdCSC=ytdCo(cc,F.metric,'cur');
+  var scSC=ytdCSC>0?pTotSC.c/ytdCSC:1;
+  // Sub-cards
+  var subCards='';
+  mLabels.forEach(function(label,i){
+    var g=null;
+    for(var gi=0;gi<CAT_REPORT_GROUPS.length;gi++){if(CAT_REPORT_GROUPS[gi].label===label){g=CAT_REPORT_GROUPS[gi];break;}}
+    if(!g)return;
+    var matchAll3=function(c){return g.subs.some(function(s){return s.match(c);});};
+    var p=((mValues[i]/tot)*100).toFixed(1);
+    var subData={labels:[],values:[]};
+    if(F.pieDim==='cat'){
+      g.subs.forEach(function(s){var a=_catAgg(s.match,countries,false);if(a.cur>0){subData.labels.push(s.label);subData.values.push(a.cur);}});
+    } else {
+      var map={};
+      DATA.rec[cc].forEach(function(r){
+        if(r[RI.ed]==='prev')return;
+        if(!matchAll3(r[RI.cat]))return;
+        var k=F.pieDim==='id'?r[RI.id]:F.pieDim==='dp'?r[RI.dp]:F.pieDim==='fo'?r[RI.fo]:F.pieDim==='co'?r[RI.co]:r[RI.cat];
+        var v=recVal(r,'cur')*f*(scSC||1);
+        if(!map[k])map[k]=0;map[k]+=v;
+      });
+      var arr=Object.entries(map).sort(function(a,b){return b[1]-a[1];});
+      subData={labels:arr.map(function(x){return x[0];}),values:arr.map(function(x){return x[1];})};
+    }
+    var subTot=subData.values.reduce(function(s,v){return s+v;},0);
+    var top=subData.labels.slice(0,8);var topV=subData.values.slice(0,8);
+    var subRows='';
+    top.forEach(function(lbl,j){var jp=subTot>0?((topV[j]/subTot)*100).toFixed(1):'0';subRows+='<div style="display:flex;align-items:center;gap:5px;font-size:10px;margin-bottom:3px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+PIE_COLORS[j%12]+';flex-shrink:0"></span><span style="color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px">'+lbl+'</span><span style="color:var(--mut);margin-left:auto;white-space:nowrap">'+jp+'%</span></div>';});
+    if(subData.labels.length>8)subRows+='<div style="font-size:10px;color:var(--mut)">+'+(subData.labels.length-8)+' m\u00e1s...</div>';
+    subCards+='<div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span style="font-weight:700;font-size:12px;color:'+mColors[i]+'">'+label+'</span><span style="font-size:11px;color:var(--acc)">'+p+'%</span></div><div style="position:relative;height:130px;margin-bottom:8px"><canvas id="pie_sub_'+i+'"></canvas></div><div>'+subRows+'</div></div>';
+  });
+  var pieSec=document.getElementById('pieSec');
+  if(!pieSec)return;
+  pieSec.innerHTML='<div style="display:grid;grid-template-columns:250px 1fr;gap:20px;align-items:start;margin-bottom:20px"><div><div style="position:relative;height:250px"><canvas id="pieMain"></canvas></div><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:6px">Total: '+fmtN(tot)+' '+(F.measure==='rev'?cur:'u')+'</div></div><div>'+legendHtml+'</div></div><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px">Desglose por:</span>'+dimBtns+(F.period!=='ytd'?'<span class="est" style="font-size:11px;margin-left:6px">\u223c valores estimados por proporci\u00f3n del per\u00edodo</span>':'')+'</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">'+subCards+'</div>';
+  var _pieEl=document.getElementById('pieMain');
+  if(_pieEl){
+    var _pc=new Chart(_pieEl,{type:'doughnut',data:{labels:mLabels,datasets:[{data:mValues,backgroundColor:mColors,borderWidth:1,borderColor:'#16212e'}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){var p=((ctx.parsed/tot)*100).toFixed(1);return ctx.label+': '+fmtN(ctx.parsed)+(F.measure==='rev'?' \u20ac':' u')+' ('+p+'%)';}}}}}}});
+    pieCharts.push(_pc);
+  }
+  mLabels.forEach(function(label,i){
+    var g2=null;
+    for(var gi=0;gi<CAT_REPORT_GROUPS.length;gi++){if(CAT_REPORT_GROUPS[gi].label===label){g2=CAT_REPORT_GROUPS[gi];break;}}
+    if(!g2)return;
+    var matchAll4=function(c){return g2.subs.some(function(s){return s.match(c);});};
+    var sd={labels:[],values:[]};
+    if(F.pieDim==='cat'){g2.subs.forEach(function(s){var a=_catAgg(s.match,countries,false);if(a.cur>0){sd.labels.push(s.label);sd.values.push(a.cur);}});}
+    else{var map2={};DATA.rec[cc].forEach(function(r){if(r[RI.ed]==='prev')return;if(!matchAll4(r[RI.cat]))return;var k=F.pieDim==='id'?r[RI.id]:F.pieDim==='dp'?r[RI.dp]:F.pieDim==='fo'?r[RI.fo]:F.pieDim==='co'?r[RI.co]:r[RI.cat];var v=recVal(r,'cur')*f*(scSC||1);if(!map2[k])map2[k]=0;map2[k]+=v;});var arr2=Object.entries(map2).sort(function(a,b){return b[1]-a[1];});sd={labels:arr2.map(function(x){return x[0];}),values:arr2.map(function(x){return x[1];})};}
+    makeDoughnut('pie_sub_'+i,sd,cc);
+  });
+};
 
 buildControls();buildTabs();render();
 </script>
