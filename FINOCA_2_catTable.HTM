@@ -1558,6 +1558,7 @@ function allMetrics(cc){
   var idx;
   if(F.period==='ytd')idx=DATA.monthYTDidx;
   else if(F.period==='h2')idx=DATA.monthH2idx;
+  else if(F.period==='mes')idx=[F.month];
   else if(F.period==='custom'){idx=[];for(var i=F.customFrom;i<=F.customTo;i++)idx.push(i);}
   else idx=DATA.monthYTDidx;
   countries.forEach(function(c){
