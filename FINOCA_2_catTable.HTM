@@ -64,7 +64,7 @@ footer{color:var(--mut);font-size:11px;line-height:1.6;border-top:1px solid var(
 <div class="controls">
  <div class="ctl"><label>Nivel</label><select id="selLevel"></select></div>
  <div class="ctl"><label>Subnivel</label><select id="selSub"></select></div>
- <div class="ctl"><label>Período</label><div class="seg" id="segPeriod"><button data-v="ytd" class="on-per">YTD 2026</button><button data-v="h2">H2 2025</button><button data-v="mes">Mes</button><button data-v="custom">Personalizar</button></div></div>
+ <div class="ctl"><label>Período</label><div class="seg" id="segPeriod"><button data-v="ytd" class="on-per">YTD 2026</button><button data-v="h2">H2 2025</button><button data-v="mes">Mes</button></div></div>
 <div id="customPeriodBar" style="display:none;padding:4px 0 0 8px;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:var(--mut)">Desde:</span><input type="month" id="customFrom" style="font-size:11px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px;color-scheme:dark light"><span style="font-size:11px;color:var(--mut)">Hasta:</span><input type="month" id="customTo" style="font-size:11px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px;color-scheme:dark light"><button onclick="applyCustomPeriod()" style="font-size:11px;background:var(--acc);color:#000;border:none;border-radius:4px;padding:3px 8px;cursor:pointer">Aplicar</button></div>
  <div class="ctl"><label>Mes (activo en vista Mes)</label><select id="selMonth"></select></div>
 </div>
@@ -1613,6 +1613,27 @@ function renderKpiGrid(cc){
     +'</div>';
 }
 
+/* ── Period scale factors (ratio period/YTD from DATA.monthly) ── */
+function _periodScaleFactors(cc){
+  var isG=(!cc||cc==='GLOBAL');
+  var ccList=isG?DATA.countries:[cc];
+  var ytdIdx=DATA.monthYTDidx;
+  var periodIdx;
+  if(F.period==='ytd')periodIdx=DATA.monthYTDidx;
+  else if(F.period==='h2')periodIdx=DATA.monthH2idx;
+  else if(F.period==='mes')periodIdx=[F.month];
+  else if(F.period==='custom'){periodIdx=[];for(var i=F.customFrom;i<=F.customTo;i++)periodIdx.push(i);}
+  else periodIdx=DATA.monthYTDidx;
+  var pR=0,pU=0,pRP=0,pUP=0,yR=0,yU=0,yRP=0,yUP=0;
+  ccList.forEach(function(c){
+    var fx=isG?(typeof toEur==='function'?toEur(c,1):1):1;
+    var md=DATA.monthly[c]||[];
+    periodIdx.forEach(function(mi){var m=md[mi];if(!m)return;pR+=m[0]*fx;pU+=m[1];pRP+=m[4]*fx;pUP+=m[5];});
+    ytdIdx.forEach(function(mi){var m=md[mi];if(!m)return;yR+=m[0]*fx;yU+=m[1];yRP+=m[4]*fx;yUP+=m[5];});
+  });
+  return{revC:yR>0?pR/yR:1,uC:yU>0?pU/yU:1,revP:yRP>0?pRP/yRP:1,uP:yUP>0?pUP/yUP:1};
+}
+
 /* ── Category comparison table V2 (uses excelMap) ── */
 function renderCatTableV2(cc){
   var sec=document.getElementById('catTableSection');
@@ -1632,6 +1653,11 @@ function renderCatTableV2(cc){
       if(r[RI.ed]==='cur'){asinData[a].r+=r[RI.rev]*fx;asinData[a].u+=r[RI.u];}
       else{asinData[a].pr+=r[RI.rev]*fx;asinData[a].pu+=r[RI.u];}
     });
+  });
+  /* Apply period scaling (same proportional approach as _catAgg / renderCountry) */
+  var _sc=_periodScaleFactors(cc);
+  Object.keys(asinData).forEach(function(a){
+    var d=asinData[a];d.r*=_sc.revC;d.u*=_sc.uC;d.pr*=_sc.revP;d.pu*=_sc.uP;
   });
   function monK(v){return v==null||isNaN(v)||v===0?'-':Math.round(v).toLocaleString('es-ES',{style:'currency',currency:'EUR',minimumFractionDigits:0,maximumFractionDigits:0});}
   function uds(v){return v==null||isNaN(v)||v===0?'-':Math.round(v).toLocaleString('es-ES');}
@@ -1757,6 +1783,20 @@ function renderColeccionesV2(cc){
         if(!descMap[a])descMap[a]={d:r[RI.de]||a,r:0,u:0,pr:0,pu:0,sub:sub};
         descMap[a].r+=rv; descMap[a].u+=u; descMap[a].pr+=pr.r; descMap[a].pu+=pr.u;
       });
+    });
+    /* Apply period scaling */
+    var _sc2=_periodScaleFactors(cc);
+    totSoR*=_sc2.revC;totSoU*=_sc2.uC;totSiR*=_sc2.revC;totSiU*=_sc2.uC;
+    totPrR*=_sc2.revP;totPrU*=_sc2.uP;
+    Object.keys(subcatCur).forEach(function(s){
+      subcatCur[s].r*=_sc2.revC;subcatCur[s].u*=_sc2.uC;
+    });
+    Object.keys(subcatPrev).forEach(function(s){
+      subcatPrev[s].r*=_sc2.revP;subcatPrev[s].u*=_sc2.uP;
+    });
+    Object.keys(descMap).forEach(function(a){
+      descMap[a].r*=_sc2.revC;descMap[a].u*=_sc2.uC;
+      descMap[a].pr*=_sc2.revP;descMap[a].pu*=_sc2.uP;
     });
     h+='<div class="panel" style="margin:0">'
       +'<h3 style="font-size:12px;color:'+brand.color+';margin:0 0 8px">'+brand.label+'</h3>'
