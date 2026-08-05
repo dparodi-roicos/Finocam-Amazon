@@ -70,7 +70,7 @@ footer{color:var(--mut);font-size:11px;line-height:1.6;border-top:1px solid var(
 </div>
 <div class="tabs" id="tabs"></div>
 <div id="view"></div>
-<div id="catSection" style="padding:0 18px 10px"></div>
+<div id="catSection" style="display:none"></div>
 <div id="catChartSection" style="padding:0 18px 40px"></div>
 <div id="catTableSection" style="padding:0 18px 10px"></div>
 <div id="coleccionesSection" style="padding:0 18px 10px"></div>
@@ -958,7 +958,7 @@ buildControls();buildTabs();render();
 </script>
 
 <!-- ======== SECCIÓN ADS (datos Pacvue, EUR) ======== -->
-<div id="ads-section" style="margin:2rem auto;max-width:1200px;padding:0 1rem;">
+<div id="ads-section" style="display:none">
   <h2 style="font-size:1.1rem;font-weight:700;color:var(--c-primary,#1a2e5a);margin-bottom:1rem;padding-bottom:.4rem;border-bottom:2px solid var(--c-accent,#e6a817);">
     Publicidad (Pacvue · EUR · ventana por defecto)
   </h2>
@@ -1469,7 +1469,7 @@ function renderMonTC_orig(cc){
   sec.innerHTML=html;
 }
 /* ─────────────────────────────────────────────────────────────────────────── */
-setTimeout(renderPacvueSection, 150);
+setTimeout(function(){renderPacvueSection();},150);
 setTimeout(function(){renderCatTableV2(F.tab==='GLOBAL'?null:F.tab);},200);
 setTimeout(function(){renderColeccionesV2(F.tab==='GLOBAL'?null:F.tab);},250);
 setTimeout(function(){renderKpiGrid(F.tab==='GLOBAL'?null:F.tab);},300);
@@ -1763,7 +1763,7 @@ function renderColeccionesV2(cc){
       h+='<tr style="background:var(--panel2);cursor:pointer" onclick="catToggle(\''+sid+'\')">'
         +'<td style="padding:3px 6px;font-weight:600;color:'+brand.color+'">&#9658; '+sub+'</td>'
         +'<td style="text-align:right;padding:3px 6px;font-weight:600">'+monK(Math.round(sv.r))+'</td>'
-        +'<td style="text-align:right;padding:3px 6px">'+Math.round(sv.u).toLocaleString('es-ES')+'</td>'
+        +'<td style="text-align:right;padding:3px 6px">'+Math.round(sv.u).toLocaleString('es-ES')+' uds'+'</td>'
         +'<td style="text-align:right;padding:3px 6px">'+yS(sv.r,sp.r)+'</td></tr>'
         +'<tr id="'+sid+'" style="display:none"><td colspan="4" style="padding:0">'
         +'<table style="width:100%"><tbody>';
@@ -1774,7 +1774,7 @@ function renderColeccionesV2(cc){
         h+='<tr style="background:var(--bg)">'
           +'<td style="padding:2px 6px 2px 16px;font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+ad.d+'</td>'
           +'<td style="text-align:right;padding:2px 6px;font-size:10px">'+monK(Math.round(ad.r))+'</td>'
-          +'<td style="text-align:right;padding:2px 6px;font-size:10px">'+Math.round(ad.u).toLocaleString('es-ES')+'</td>'
+          +'<td style="text-align:right;padding:2px 6px;font-size:10px">'+Math.round(ad.u).toLocaleString('es-ES')+' uds'+'</td>'
           +'<td style="text-align:right;padding:2px 6px;font-size:10px">'+yS(ad.r,ad.pr)+'</td></tr>';
       });
       h+='</tbody></table></td></tr>';
@@ -1792,5 +1792,90 @@ window.catToggle=function(id){
   if(!el)return;
   el.style.display=el.style.display==='none'?'table-row':'none';
 };
+
+/* ── patchPacvueSection: fix category table alignment + redesign monthly chart ── */
+function patchPacvueSection(){
+  var pacSec=document.getElementById('pacvueSection');
+  if(!pacSec)return;
+
+  /* Fix category table: remove colspan=2 on subcategory name cells,
+     insert an empty first cell to restore 6-column alignment */
+  var colspanCells=pacSec.querySelectorAll('td[colspan="2"]');
+  colspanCells.forEach(function(cell){
+    cell.removeAttribute('colspan');
+    cell.style.paddingLeft='18px';
+    var emptyTd=document.createElement('td');
+    cell.parentNode.insertBefore(emptyTd,cell);
+  });
+
+  /* Rebuild pvCatChart as a line chart (cleaner for monthly trends) */
+  var pvCEl=document.getElementById('pvCatChart');
+  if(!pvCEl||!window._pvCatChart)return;
+
+  /* Extract the existing datasets (already aggregated) */
+  var oldDS=window._pvCatChart.data.datasets.slice();
+  var oldLabels=window._pvCatChart.data.labels.slice();
+  window._pvCatChart.destroy();
+
+  /* Sort by total spend, keep top 6, merge rest into "Otros" */
+  var totals=oldDS.map(function(ds){return ds.data.reduce(function(s,v){return s+(v||0);},0);});
+  var indices=oldDS.map(function(_,i){return i;}).sort(function(a,b){return totals[b]-totals[a];});
+  var TOP=6;
+  var newDS=[];
+  var PALETTE=['#FF9900','#4e9af1','#2ecc71','#e74c3c','#9b59b6','#f39c12','#1abc9c','#e67e22'];
+  indices.slice(0,Math.min(TOP,indices.length)).forEach(function(idx,rank){
+    var ds=oldDS[idx];
+    var col=PALETTE[rank]||ds.backgroundColor||'#999';
+    newDS.push({
+      label:ds.label,
+      data:ds.data.map(function(v){return v||0;}),
+      borderColor:col,
+      backgroundColor:col+'22',
+      borderWidth:2,
+      pointRadius:3,
+      pointBackgroundColor:col,
+      fill:false,
+      tension:0.3
+    });
+  });
+  if(indices.length>TOP){
+    var otrosData=oldLabels.map(function(_,mi){
+      return indices.slice(TOP).reduce(function(s,idx){return s+(oldDS[idx].data[mi]||0);},0);
+    });
+    if(otrosData.some(function(v){return v>0;})){
+      newDS.push({
+        label:'Otros',data:otrosData,borderColor:'#888888',backgroundColor:'#88888822',
+        borderWidth:1,pointRadius:2,pointBackgroundColor:'#888888',fill:false,tension:0.3
+      });
+    }
+  }
+
+  window._pvCatChart=new Chart(pvCEl,{
+    type:'line',
+    data:{labels:oldLabels,datasets:newDS},
+    options:{
+      maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'bottom',labels:{color:'var(--ink)',boxWidth:14,font:{size:11},padding:12}},
+        tooltip:{callbacks:{label:function(ctx){
+          var v=ctx.parsed.y;
+          return ctx.dataset.label+': '+(v>0?Math.round(v).toLocaleString('es-ES')+' \u20ac':'-');
+        }}}
+      },
+      scales:{
+        x:{ticks:{color:'var(--mut)',font:{size:10}},grid:{color:'rgba(128,128,128,.08)'}},
+        y:{
+          title:{display:true,text:'Inversi\u00f3n (\u20ac)',color:'var(--mut)',font:{size:10}},
+          ticks:{color:'var(--mut)',font:{size:10},callback:function(v){
+            return v>=1000?Math.round(v/1000)+'k':v;
+          }},
+          grid:{color:'rgba(128,128,128,.08)'}
+        }
+      }
+    }
+  });
+}
+setTimeout(patchPacvueSection,300);
 </script>
 </body></html>
