@@ -65,7 +65,7 @@ footer{color:var(--mut);font-size:11px;line-height:1.6;border-top:1px solid var(
  <div class="ctl"><label>Nivel</label><select id="selLevel"></select></div>
  <div class="ctl"><label>Subnivel</label><select id="selSub"></select></div>
  <div class="ctl"><label>Período</label><div class="seg" id="segPeriod"><button data-v="ytd" class="on-per">YTD 2026</button><button data-v="h2">H2 2025</button><button data-v="mes">Mes</button><button data-v="custom">Personalizar</button></div></div>
-<div id="customPeriodBar" style="display:none;padding:4px 0 0 8px;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:var(--mut)">Desde:</span><select id="customFrom" style="font-size:11px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px"></select><span style="font-size:11px;color:var(--mut)">Hasta:</span><select id="customTo" style="font-size:11px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px"></select><button onclick="applyCustomPeriod()" style="font-size:11px;background:var(--acc);color:#000;border:none;border-radius:4px;padding:3px 8px;cursor:pointer">Aplicar</button></div>
+<div id="customPeriodBar" style="display:none;padding:4px 0 0 8px;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:var(--mut)">Desde:</span><input type="month" id="customFrom" style="font-size:11px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px;color-scheme:dark light"><span style="font-size:11px;color:var(--mut)">Hasta:</span><input type="month" id="customTo" style="font-size:11px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px;color-scheme:dark light"><button onclick="applyCustomPeriod()" style="font-size:11px;background:var(--acc);color:#000;border:none;border-radius:4px;padding:3px 8px;cursor:pointer">Aplicar</button></div>
  <div class="ctl"><label>Mes (activo en vista Mes)</label><select id="selMonth"></select></div>
 </div>
 <div class="tabs" id="tabs"></div>
@@ -1486,16 +1486,19 @@ DATA.tcAsins=["B07TCPX2PP","B08D3QC7MF","B0D3F4RW43","B0D3F59XYM","B0D3F5DRVD","
 /* ── Period helpers ── */
 function openCalendar(){
   var bar=document.getElementById('customPeriodBar');
-  var fromSel=document.getElementById('customFrom');
-  var toSel=document.getElementById('customTo');
   if(bar.style.display!=='flex'){
-    if(!fromSel.options.length){
-      DATA.monthLabels.forEach(function(lbl,i){
-        var o1=document.createElement('option');o1.value=i;o1.textContent=lbl;fromSel.appendChild(o1);
-        var o2=document.createElement('option');o2.value=i;o2.textContent=lbl;toSel.appendChild(o2);
-      });
-      toSel.value=String(DATA.monthLabels.length-1);
-    }
+    var fromEl=document.getElementById('customFrom');
+    var toEl=document.getElementById('customTo');
+    var ES_M={Ene:'01',Feb:'02',Mar:'03',Abr:'04',May:'05',Jun:'06',Jul:'07',Ago:'08',Sep:'09',Oct:'10',Nov:'11',Dic:'12'};
+    function lbl2ym(lbl){var p=lbl.split(' ');return'20'+p[1]+'-'+ES_M[p[0]];}
+    var ymMin=lbl2ym(DATA.monthLabels[0]);
+    var ymMax=lbl2ym(DATA.monthLabels[DATA.monthLabels.length-1]);
+    fromEl.min=ymMin; fromEl.max=ymMax;
+    toEl.min=ymMin; toEl.max=ymMax;
+    var fi=Math.max(0,Math.min(F.customFrom,DATA.monthLabels.length-1));
+    var ti=Math.max(0,Math.min(F.customTo,DATA.monthLabels.length-1));
+    fromEl.value=lbl2ym(DATA.monthLabels[fi]);
+    toEl.value=lbl2ym(DATA.monthLabels[ti]);
     bar.style.display='flex';
   } else {
     bar.style.display='none';
@@ -1505,9 +1508,22 @@ function openCalendar(){
   if(cb&&bar.style.display==='flex')cb.classList.add('on-per');
 }
 function applyCustomPeriod(){
-  F.customFrom=+document.getElementById('customFrom').value;
-  F.customTo=+document.getElementById('customTo').value;
-  if(F.customFrom>F.customTo){var t=F.customFrom;F.customFrom=F.customTo;F.customTo=t;}
+  var fromVal=document.getElementById('customFrom').value;
+  var toVal=document.getElementById('customTo').value;
+  if(!fromVal||!toVal)return;
+  var ES_M={Ene:1,Feb:2,Mar:3,Abr:4,May:5,Jun:6,Jul:7,Ago:8,Sep:9,Oct:10,Nov:11,Dic:12};
+  function ym2idx(ym){
+    var lbl0=DATA.monthLabels[0].split(' ');
+    var baseM=ES_M[lbl0[0]];
+    var baseY=2000+parseInt(lbl0[1]);
+    var parts=ym.split('-');
+    return(parseInt(parts[0])-baseY)*12+(parseInt(parts[1])-baseM);
+  }
+  var n=DATA.monthLabels.length-1;
+  var fi=Math.max(0,Math.min(ym2idx(fromVal),n));
+  var ti=Math.max(0,Math.min(ym2idx(toVal),n));
+  if(fi>ti){var tmp=fi;fi=ti;ti=tmp;}
+  F.customFrom=fi; F.customTo=ti;
   F.period='custom';
   render();
 }
