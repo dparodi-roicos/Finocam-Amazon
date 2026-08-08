@@ -33,9 +33,11 @@ MARKETPLACE_FLAG  = "🇪🇸"              # emoji bandera
 # CSV_DIR: carpeta con los 4 archivos weekly_0.csv … weekly_3.csv
 # Estos se descargan desde MerchantSpring (generateOrderedRevenueReport)
 # y se renombran como weekly_0, weekly_1, weekly_2, weekly_3 (W1→W4)
-CSV_DIR    = r'C:\Users\Daniela\Desktop\Git Finocam\tools\data'   # ← cambiar al dir real con los CSVs
-EXCEL_PATH = r'C:\Users\Daniela\Downloads\FINOCAM_Familias_Subfamilias_ASIN.xlsx'
-OUT_PATH   = r'C:\Users\Daniela\Downloads\FINOCAM_Weekly.html'
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CSV_DIR    = os.environ.get('WEEKLY_CSV_DIR',  os.path.join(_SCRIPT_DIR, 'data'))
+EXCEL_PATH = os.environ.get('WEEKLY_EXCEL',    r'C:\Users\Daniela\Downloads\FINOCAM_Familias_Subfamilias_ASIN.xlsx')
+CATALOG_JSON = os.path.join(_SCRIPT_DIR, 'data', 'catalog_es.json')
+OUT_PATH   = os.environ.get('WEEKLY_OUT_PATH', os.path.join(os.path.dirname(_SCRIPT_DIR), 'FINOCAM_Weekly.html'))
 
 # -- Semanas (W1 → W4, en orden cronológico) -------------------------
 WEEKS = [
@@ -77,49 +79,52 @@ UPDATE_DATE = "2026-08-07"
 # ═══════════════════════════════════════════════════════════════════
 
 # ── 1. Catálogo ────────────────────────────────────────────────────
-import openpyxl
-wb = openpyxl.load_workbook(EXCEL_PATH, data_only=True)
-
-catalog = {}
-for sname in wb.sheetnames:
-    if sname in SKIP or sname in COLS:
-        continue
-    for r in list(wb[sname].iter_rows(values_only=True))[1:]:
-        if not r[1]:
+# Lee desde JSON (cloud/auto) si está disponible; si no, desde Excel (local)
+if os.path.exists(CATALOG_JSON):
+    with open(CATALOG_JSON, encoding='utf-8') as f:
+        catalog = json.load(f)
+    print(f'Catálogo: {len(catalog)} ASINs (desde catalog_es.json)')
+else:
+    import openpyxl
+    wb = openpyxl.load_workbook(EXCEL_PATH, data_only=True)
+    catalog = {}
+    for sname in wb.sheetnames:
+        if sname in SKIP or sname in COLS:
             continue
-        asin = str(r[1]).strip()
-        if not is_valid_anualidad(r[2]):
+        for r in list(wb[sname].iter_rows(values_only=True))[1:]:
+            if not r[1]:
+                continue
+            asin = str(r[1]).strip()
+            if not is_valid_anualidad(r[2]):
+                continue
+            if asin not in catalog:
+                catalog[asin] = {
+                    'familia': sname,
+                    'sub':     str(r[0] or '').strip(),
+                    'any':     str(r[2] or '').strip(),
+                    'desc':    str(r[3] or '').strip(),
+                    'col':     None,
+                }
+    for col in COLS:
+        if col not in wb.sheetnames:
             continue
-        if asin not in catalog:
-            catalog[asin] = {
-                'familia': sname,
-                'sub':     str(r[0] or '').strip(),
-                'any':     str(r[2] or '').strip(),
-                'desc':    str(r[3] or '').strip(),
-                'col':     None,
-            }
-
-for col in COLS:
-    if col not in wb.sheetnames:
-        continue
-    for r in list(wb[col].iter_rows(values_only=True))[1:]:
-        if not r[2]:
-            continue
-        asin = str(r[2]).strip()
-        if not is_valid_anualidad(r[3]):
-            continue
-        if asin in catalog:
-            catalog[asin]['col'] = col
-        else:
-            catalog[asin] = {
-                'familia': str(r[0] or '').strip(),
-                'sub':     str(r[1] or '').strip(),
-                'any':     str(r[3] or '').strip(),
-                'desc':    str(r[4] or '').strip(),
-                'col':     col,
-            }
-
-print(f'Catálogo: {len(catalog)} ASINs activos')
+        for r in list(wb[col].iter_rows(values_only=True))[1:]:
+            if not r[2]:
+                continue
+            asin = str(r[2]).strip()
+            if not is_valid_anualidad(r[3]):
+                continue
+            if asin in catalog:
+                catalog[asin]['col'] = col
+            else:
+                catalog[asin] = {
+                    'familia': str(r[0] or '').strip(),
+                    'sub':     str(r[1] or '').strip(),
+                    'any':     str(r[3] or '').strip(),
+                    'desc':    str(r[4] or '').strip(),
+                    'col':     col,
+                }
+    print(f'Catálogo: {len(catalog)} ASINs (desde Excel)')
 
 # ── 2. CSVs semanales ──────────────────────────────────────────────
 # Esperados: weekly_0.csv (W1) … weekly_3.csv (W4) en CSV_DIR
