@@ -503,6 +503,9 @@ td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
   <button class="btn-sm on" id="bRev" onclick="togRev()">€ Facturación</button>
   <button class="btn-sm on" id="bU"   onclick="togU()">📦 Unidades</button>
   <div class="tbar-sep"></div>
+  <span class="tlbl">YOY</span>
+  <div class="leg" style="gap:3px"><span style="background:rgba(34,197,94,.13);color:#4ade80;font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px">+X%</span>vs misma semana año anterior</div>
+  <div class="tbar-sep"></div>
   <button class="btn-sm" onclick="expAll()">+ Todo</button>
   <button class="btn-sm" onclick="colAll()">− Todo</button>
   <span style="margin-left:auto;font-size:9px;color:var(--t3)">Actualizado {UPDATE_DATE} · Tendencia: W4 vs media W1–W3 en unidades</span>
