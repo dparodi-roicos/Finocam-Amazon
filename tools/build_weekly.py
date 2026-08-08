@@ -40,7 +40,21 @@ CATALOG_JSON = os.path.join(_SCRIPT_DIR, 'data', 'catalog_es.json')
 OUT_PATH   = os.environ.get('WEEKLY_OUT_PATH', os.path.join(os.path.dirname(_SCRIPT_DIR), 'FINOCAM_Weekly.html'))
 
 # -- Semanas (W1 → W4, en orden cronológico) -------------------------
-WEEKS = [
+# Si WEEKLY_AUTO=1 (modo agente/cloud), se calculan las últimas 4 semanas ISO
+import datetime as _dt
+_MONTHS_ES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+def _auto_weeks():
+    today = _dt.date.today()
+    this_mon = today - _dt.timedelta(days=today.weekday())
+    out = []
+    for i in range(4, 0, -1):
+        mon = this_mon - _dt.timedelta(weeks=i)
+        sun = mon + _dt.timedelta(days=6)
+        label = f'{mon.day}–{sun.day} {_MONTHS_ES[mon.month]}'
+        out.append({'label': label, 'wk': f'W{5-i}'})
+    return out
+
+WEEKS = _auto_weeks() if os.environ.get('WEEKLY_AUTO') == '1' else [
     {'label': '7–13 Jul',      'wk': 'W1'},
     {'label': '14–20 Jul',     'wk': 'W2'},
     {'label': '21–27 Jul',     'wk': 'W3'},
@@ -72,7 +86,7 @@ CAT_ORDER = [
 ]
 
 # -- Fecha de actualización (se muestra en el toolbar) ---------------
-UPDATE_DATE = "2026-08-07"
+UPDATE_DATE = _dt.date.today().isoformat() if os.environ.get('WEEKLY_AUTO') == '1' else "2026-08-07"
 
 # ═══════════════════════════════════════════════════════════════════
 #  FIN CONFIG — el resto no necesita editarse para un cliente nuevo
