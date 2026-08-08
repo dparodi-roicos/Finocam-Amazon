@@ -69,10 +69,12 @@ th.wkh{min-width:82px;text-align:center;border-left:1px solid var(--bd2)}
 th.tndh{min-width:68px;text-align:center}
 
 /* CATEGORY ROW */
-tr.rc td{background:var(--s2);border-bottom:1px solid var(--bd);padding:10px 12px;border-left:4px solid transparent;transition:background .1s;cursor:pointer}
+tr.rc td{background:var(--s2);border-bottom:1px solid var(--bd);padding:10px 12px;transition:background .1s;cursor:pointer}
+tr.rc td.nc{border-left:4px solid transparent}
 tr.rc:hover td{background:var(--s3)}
-tr.rcrc-col td, tr.rc.col td{border-left:4px solid var(--acc)!important;background:linear-gradient(90deg,rgba(255,153,0,.07) 0,var(--s2) 110px)!important}
-tr.rc.col:hover td{background:linear-gradient(90deg,rgba(255,153,0,.12) 0,var(--s3) 110px)!important}
+tr.rc.col td{background:linear-gradient(90deg,rgba(255,153,0,.06) 0%,var(--s2) 50%)!important}
+tr.rc.col td.nc{border-left:4px solid var(--acc)!important}
+tr.rc.col:hover td{background:linear-gradient(90deg,rgba(255,153,0,.11) 0%,var(--s3) 50%)!important}
 .ci{font-size:9px;color:var(--t3);margin-right:7px;transition:transform .15s;display:inline-block}
 .rc.open .ci{transform:rotate(90deg);color:var(--acc)}
 .cn-lbl{font-size:13px;font-weight:700}
@@ -179,7 +181,7 @@ td.tend{text-align:center;padding:3px 7px;vertical-align:middle}
       <canvas id="cvWeek" height="110"></canvas>
     </div>
     <div class="chart-box">
-      <div class="chart-title">Categorías · W4 vs semanas anteriores</div>
+      <div class="chart-title">Tendencia por categoría · unidades (normalizado)</div>
       <canvas id="cvCat" height="110"></canvas>
     </div>
   </div>
@@ -43728,7 +43730,8 @@ function tgTh(){
   const r=document.documentElement,c=r.getAttribute('data-theme')||'dark';
   r.setAttribute('data-theme',c==='dark'?'light':'dark');
   document.getElementById('btnTh').textContent=c==='dark'?'☀':'🌙';
-  drawCharts();
+  // small delay so data-theme is set before canvas reads it
+  setTimeout(drawCharts,30);
 }
 
 /* ── View toggles ── */
@@ -43813,40 +43816,56 @@ function drawWeekChart(canvas){
 }
 
 function drawCatChart(canvas){
+  // Heatmap: categories (rows) x weeks (cols), color = % of category max
   const dpr=window.devicePixelRatio||1;
-  const W=canvas.offsetWidth, H=canvas.offsetHeight||110;
+  const W=canvas.offsetWidth||300, H=canvas.offsetHeight||110;
   canvas.width=W*dpr; canvas.height=H*dpr;
   const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+  const isDark=(document.documentElement.getAttribute('data-theme')||'dark')==='dark';
   const cats=CD.cats.filter(c=>c.u.some(v=>v>0));
-  const t1=getCSS('--t1'), t2=getCSS('--t2'), t3=getCSS('--t3');
-  const g=getCSS('--g'), y=getCSS('--y'), r=getCSS('--r'), acc=getCSS('--acc');
-  const ROW_H=Math.floor((H-10)/cats.length);
-  const NAME_W=80, PAD_R=10, BAR_AREA=W-NAME_W-PAD_R;
+  const n=cats.length, WEEKS=4;
+  const NAME_W=76, PAD_T=16, PAD_B=4, PAD_R=6;
+  const CELL_W=Math.floor((W-NAME_W-PAD_R)/WEEKS);
+  const CELL_H=Math.floor((H-PAD_T-PAD_B)/n);
+  const t2=isDark?'#8892b0':'#556080';
+  const t3=isDark?'#4a5270':'#8898b8';
+  const bd=isDark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)';
+  const wkLabels=['W1','W2','W3','W4'];
+  // Week column headers
+  wkLabels.forEach((lbl,wi)=>{
+    const cx=NAME_W+wi*CELL_W+CELL_W/2;
+    ctx.fillStyle=t3; ctx.font='bold 9px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(lbl,cx,PAD_T-4);
+  });
   cats.forEach((cat,ci)=>{
     const maxU=Math.max(...cat.u)||1;
-    const ry=5+ci*ROW_H;
-    // category name
+    const ry=PAD_T+ci*CELL_H;
+    // Category label
     ctx.fillStyle=t2; ctx.font='10px sans-serif'; ctx.textAlign='right';
-    ctx.fillText(cat.name.slice(0,12),NAME_W-6,ry+ROW_H/2+3);
-    // 4 mini bars
-    const BAR_W=Math.floor(BAR_AREA/4*0.6);
-    const BAR_GAP=(BAR_AREA-BAR_W*4)/5;
+    const lbl=cat.name.length>10?cat.name.slice(0,9)+'…':cat.name;
+    ctx.fillText(lbl, NAME_W-4, ry+CELL_H/2+3.5);
+    // Heatmap cells
     cat.u.forEach((v,wi)=>{
-      const bh=Math.max(2,Math.floor((v/maxU)*(ROW_H-4)));
-      const bx=NAME_W+BAR_GAP*(wi+1)+BAR_W*wi;
-      const by=ry+ROW_H-2-bh;
-      const isW4=wi===3;
-      const p=v/cat.mu_all||0;
-      let col=isW4?acc:'rgba(255,153,0,.35)';
-      ctx.fillStyle=col;
-      ctx.beginPath(); ctx.roundRect(bx,by,BAR_W,bh,1); ctx.fill();
+      const ratio=v/maxU;
+      const cx=NAME_W+wi*CELL_W, cy=ry+1;
+      const cw=CELL_W-2, ch=CELL_H-2;
+      // Color: low = neutral, high = orange, via alpha
+      const alpha=0.12+ratio*0.78;
+      ctx.fillStyle=`rgba(255,153,0,${alpha.toFixed(2)})`;
+      ctx.beginPath(); ctx.roundRect(cx,cy,cw,ch,3); ctx.fill();
+      // Value text
+      const uStr=v>=1000?(v/1000).toFixed(1)+'k':String(v);
+      ctx.fillStyle=ratio>0.55?(isDark?'#fff':'#1a1a1a'):(isDark?'#8892b0':'#556080');
+      ctx.font=`${ratio>0.6?'bold ':''}9px sans-serif`;
+      ctx.textAlign='center';
+      ctx.fillText(uStr, cx+cw/2, cy+ch/2+3.5);
     });
-    // divider
-    if(ci<cats.length-1){ctx.strokeStyle=getCSS('--bd2');ctx.lineWidth=.4;ctx.beginPath();ctx.moveTo(0,ry+ROW_H);ctx.lineTo(W,ry+ROW_H);ctx.stroke();}
+    // Row divider
+    if(ci<n-1){
+      ctx.strokeStyle=bd; ctx.lineWidth=.5;
+      ctx.beginPath(); ctx.moveTo(0,ry+CELL_H); ctx.lineTo(W,ry+CELL_H); ctx.stroke();
+    }
   });
-  // W legend at bottom right
-  ctx.fillStyle=t3; ctx.font='8px sans-serif'; ctx.textAlign='right';
-  ctx.fillText('W1  W2  W3  W4',W-PAD_R,H-1);
 }
 
 function drawCharts(){
