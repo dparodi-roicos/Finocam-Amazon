@@ -1,0 +1,3 @@
+tools/.env.local
+tools/logs/
+tools/data/weekly_*.csv
