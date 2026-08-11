@@ -535,10 +535,10 @@ def market_section(code, md, WEEKS):
       sec.querySelectorAll('.yy-u').forEach(function(e){{e.style.display=sU_{code}?'':'none';}});
       sec.querySelectorAll('.yy-r').forEach(function(e){{e.style.display=(!sU_{code}&&sRev_{code})?'':'none';}});
     }}
-    window.togRev=window.togRev||{{}};
-    window.togU=window.togU||{{}};
-    window.togRev['{code}']=togRev_{code};
-    window.togU['{code}']=togU_{code};
+    window._mktTogRev=window._mktTogRev||{{}};
+    window._mktTogU=window._mktTogU||{{}};
+    window._mktTogRev['{code}']=togRev_{code};
+    window._mktTogU['{code}']=togU_{code};
     window.CHART_DATA=window.CHART_DATA||{{}};
     window.CHART_DATA['{code}']=CD_{code};
   }})();
@@ -786,43 +786,32 @@ function tgC(el){{
 }}
 function tgS(el){{
   var tr=el.closest('tr');
-  var cat=tr.dataset.p, sub=tr.dataset.s||tr.querySelector('[data-s]');
-  // find sub from siblings
+  var cat=tr.dataset.p;
   var tbody=tr.closest('tbody');
-  // get all ASIN rows matching parent+sub
-  var rows=[...tbody.querySelectorAll('tr.ra')].filter(function(r){{return r.dataset.p===cat&&(!r.dataset.s||r.querySelector);}}');
-  // simpler: find by sibling pattern
-  var allRa=tbody.querySelectorAll('tr.ra[data-p="'+cat+'"]');
-  // need sub_id — stored on tr.rs
-  var sub_id=tr.querySelector('.sn-lbl');
-  // fallback: use aria or index
-  // NOTE: sub_id is embedded in tr.rs via onclick previously — now we use el
-  // Find the sub_id from the table
   var subRows=[];
-  var found=false;
-  var nextRs=tr.nextElementSibling;
-  while(nextRs&&!nextRs.classList.contains('rs')&&!nextRs.classList.contains('rc')){{
-    if(nextRs.classList.contains('ra')&&nextRs.dataset.p===cat)subRows.push(nextRs);
-    nextRs=nextRs.nextElementSibling;
+  var nextEl=tr.nextElementSibling;
+  while(nextEl&&!nextEl.classList.contains('rs')&&!nextEl.classList.contains('rc')){{
+    if(nextEl.classList.contains('ra')&&nextEl.dataset.p===cat)subRows.push(nextEl);
+    nextEl=nextEl.nextElementSibling;
   }}
   if(subRows.length===0){{
-    // scan all ra with same parent
-    var op2=true;
-    allRa.forEach(function(r){{if(r.style.display!=='none')op2=false;}});
-    allRa.forEach(function(r){{r.style.display=op2?'':'none';}});
-    tr.classList.toggle('open',op2);
+    var allRa=tbody.querySelectorAll('tr.ra[data-p="'+cat+'"]');
+    var op=true;
+    allRa.forEach(function(r){{if(r.style.display!=='none')op=false;}});
+    allRa.forEach(function(r){{r.style.display=op?'':'none';}});
+    tr.classList.toggle('open',op);
   }}else{{
-    var op3=subRows[0].style.display==='none';
-    subRows.forEach(function(r){{r.style.display=op3?'':'none';}});
-    tr.classList.toggle('open',op3);
+    var op=subRows[0].style.display==='none';
+    subRows.forEach(function(r){{r.style.display=op?'':'none';}});
+    tr.classList.toggle('open',op);
   }}
 }}
 function expAll(code){{document.getElementById('tb-'+code).querySelectorAll('.rs,.ra').forEach(function(r){{r.style.display='';}});}}
 function colAll(code){{document.getElementById('tb-'+code).querySelectorAll('.rs,.ra').forEach(function(r){{r.style.display='none';}});}}
 
-// Toggles YOY
-function togRev(code){{if(window.togRev&&window.togRev[code])window.togRev[code]();}}
-function togU(code){{if(window.togU&&window.togU[code])window.togU[code]();}}
+// Toggles por mercado — usa registro propio para evitar sobreescritura por hoisting
+function togRev(code){{var f=window._mktTogRev&&window._mktTogRev[code];if(f)f();}}
+function togU(code){{var f=window._mktTogU&&window._mktTogU[code];if(f)f();}}
 
 // Graficos de mercado
 function getCSS(v){{return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||v;}}
