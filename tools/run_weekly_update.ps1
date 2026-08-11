@@ -1,5 +1,5 @@
-# run_weekly_update.ps1 - Ejecutado cada lunes a las 09:00 por Task Scheduler
-# Lanza Claude Code con el prompt de actualizacion semanal Finocam
+# run_weekly_update.ps1 - Ejecutado cada lunes y viernes a las 09:00 por Task Scheduler
+# Lanza Claude Code con el prompt de actualizacion semanal Finocam (9 mercados)
 
 $ErrorActionPreference = "Continue"
 $ToolsDir = "C:\Users\Daniela\Desktop\Git Finocam\tools"
