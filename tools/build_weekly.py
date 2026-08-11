@@ -444,13 +444,14 @@ def market_section(code, md, WEEKS):
 
     chart_data = json.dumps({
         'weekNames': WEEK_NAMES,
+        'weekIso': [w['iso_wk'] for w in WEEKS],
         'weekTotalsU': wtU,
         'weekTotalsR': [round(v) for v in wtR],
         'cats': md['cat_chart'],
     })
 
     wk_ths = ''.join(
-        f'<th class="wkh"><div class="wkl">{w["wk"]}<sup class="iso-w">W{w["iso_wk"]}</sup></div><div class="wkd">{w["label"]}</div></th>'
+        f'<th class="wkh"><div class="wkl">Sem&nbsp;{w["iso_wk"]}</div><div class="wkd">{w["label"]}</div></th>'
         for w in WEEKS
     )
     rows_html = build_rows(md['dash'], md['aw'], total_u, currency)
@@ -486,7 +487,7 @@ def market_section(code, md, WEEKS):
       </div>
       <div class="chart-box">
         <div class="chart-title">Tendencia por categoría · unidades</div>
-        <canvas id="cvCat-{code}" height="110"></canvas>
+        <canvas id="cvCat-{code}" height="140"></canvas>
       </div>
     </div>
   </div>
@@ -501,7 +502,7 @@ def market_section(code, md, WEEKS):
     <div class="tbar-sep"></div>
     <button class="btn-sm" onclick="expAll('{code}')">+ Todo</button>
     <button class="btn-sm" onclick="colAll('{code}')">− Todo</button>
-    <span style="margin-left:auto;font-size:9px;color:var(--t3)">W=ISO week · Tendencia: W4 vs media W1–W3</span>
+    <span style="margin-left:auto;font-size:9px;color:var(--t3)">Sem=semana ISO · Tendencia: última semana vs media semanas anteriores</span>
   </div>
   <div class="wrap">
   <table>
@@ -555,11 +556,23 @@ for key, entry in history.items():
     for mc in MARKET_CONFIGS:
         code = mc['code']
         mkt = (entry.get('markets') or {}).get(code)
-        row['markets'][code] = mkt['u'] if mkt else 0
+        if mkt:
+            row['markets'][code] = {'u': mkt.get('u', 0), 'r': round(mkt.get('r', 0), 1), 'cats': mkt.get('cats', {})}
+        else:
+            row['markets'][code] = None
     hist_data.append(row)
 
 HIST_JS = json.dumps(hist_data)
 MKT_JS  = json.dumps([{'code': mc['code'], 'flag': mc['flag'], 'label': mc['label']} for mc in MARKET_CONFIGS])
+
+# Week picker chips (generated in Python from history data)
+wk_chips_html = ''
+for _he in hist_data:
+    _iso = _he['iso']; _yr = _he['yr']; _lbl = _he['label']; _key = _he['key']
+    wk_chips_html += (f'<button class="wk-chip" data-key="{_key}" '
+                      f'onclick="showWkSnap(this,\'{_key}\')">'
+                      f'<span class="wkc-iso">Sem&nbsp;{_iso}</span>'
+                      f'<span class="wkc-dt">{_lbl}</span></button>')
 
 # ===========================================================
 #  9. HTML COMPLETO
@@ -711,6 +724,28 @@ td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
 .t-na{{font-size:11px;color:var(--t3)}}
 .no-data{{padding:40px 20px;text-align:center;color:var(--t3);font-size:13px}}
 .ft{{padding:10px 20px;border-top:1px solid var(--bd2);font-size:9px;color:var(--t3);display:flex;gap:12px;flex-wrap:wrap}}
+/* WEEK PICKER */
+.wk-strip{{background:var(--s1);border-bottom:1px solid var(--bd);padding:6px 20px;display:flex;align-items:center;gap:10px}}
+.wk-strip-lbl{{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.7px;font-weight:600;white-space:nowrap;flex-shrink:0}}
+.wk-chips{{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px}}
+.wk-chip{{background:var(--s3);border:1px solid var(--bd);color:var(--t2);padding:4px 9px;border-radius:5px;cursor:pointer;font-size:10px;transition:all .15s;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.3;flex-shrink:0}}
+.wk-chip:hover{{background:var(--s4);color:var(--t1)}}
+.wk-chip.active{{background:rgba(255,153,0,.13);border-color:rgba(255,153,0,.35);color:var(--acc)}}
+.wkc-iso{{font-weight:700;font-size:10px}}
+.wkc-dt{{font-size:8px;color:var(--t3)}}
+.wk-chip.active .wkc-dt{{color:var(--acc2)}}
+/* WEEK SNAPSHOT */
+.wk-snap{{background:var(--s2);border-bottom:1px solid var(--bd);padding:12px 20px}}
+.snap-hdr{{font-size:11px;font-weight:700;color:var(--t1);display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}}
+.snap-mkt{{font-size:10px;color:var(--acc);font-weight:600}}
+.snap-close{{background:none;border:none;color:var(--t3);cursor:pointer;font-size:16px;margin-left:auto;padding:0 4px;line-height:1}}
+.snap-close:hover{{color:var(--t1)}}
+.snap-empty{{color:var(--t3);font-size:11px}}
+.snap-cats{{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}}
+.snap-cat{{background:var(--s3);border:1px solid var(--bd);border-radius:5px;padding:6px 10px;min-width:100px}}
+.sc-name{{font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px}}
+.sc-u{{font-size:14px;font-weight:700;color:var(--t1);font-variant-numeric:tabular-nums;display:block}}
+.sc-r{{font-size:10px;color:var(--t2);display:block}}
 </style>
 </head>
 <body>
@@ -730,6 +765,12 @@ td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
 <div class="mkt-nav">
   {market_tabs_html}
 </div>
+
+<div class="wk-strip">
+  <span class="wk-strip-lbl">Semanas archivadas</span>
+  <div class="wk-chips">{wk_chips_html}</div>
+</div>
+<div class="wk-snap" id="wk-snap" style="display:none"></div>
 
 {all_sections_html}
 
@@ -771,7 +812,17 @@ function showMkt(code){{
   var btn=document.getElementById('tab-'+code);
   if(btn)btn.classList.add('active');
   _activeMkt=code;
-  setTimeout(function(){{drawAllCharts(code);}},30);
+  // sync historico: mercado activo siempre visible, conservar extras
+  if(_histMkts.indexOf(code)<0){{_histMkts=[code];}}
+  // actualizar botones hist
+  document.querySelectorAll('.btn-hist').forEach(function(b){{
+    var c=b.id.replace('hbtn-','');
+    b.classList.toggle('on',_histMkts.indexOf(c)>=0);
+  }});
+  // cerrar snapshot si el mercado cambió
+  document.querySelectorAll('.wk-chip').forEach(function(b){{b.classList.remove('active');}});
+  var ws=document.getElementById('wk-snap');if(ws)ws.style.display='none';
+  setTimeout(function(){{drawAllCharts(code);drawHistChart();}},30);
 }}
 
 // Collapse/expand
@@ -844,43 +895,77 @@ function drawWeekChart(canvas, data){{
     ctx.fillStyle=(i===bestI)?acc:t2;ctx.font='bold 9px sans-serif';ctx.textAlign='center';
     ctx.fillText(v>=1000?(v/1000).toFixed(1)+'k':v,x+bw/2,y-3);
     ctx.fillStyle=t3;ctx.font='9px sans-serif';
-    ctx.fillText(data.weekNames[i].split('–')[0].trim(),x+bw/2,H-pad.b+11);
+    var wkLbl=data.weekIso?'S'+data.weekIso[i]:data.weekNames[i].split('–')[0].trim();
+    ctx.fillText(wkLbl,x+bw/2,H-pad.b+11);
   }});
 }}
 
 function drawCatChart(canvas, data){{
   if(!canvas||!canvas.offsetWidth)return;
   var dpr=window.devicePixelRatio||1;
-  var W=canvas.offsetWidth||300,H=canvas.offsetHeight||110;
+  var W=canvas.offsetWidth||300,H=canvas.offsetHeight||140;
   canvas.width=W*dpr;canvas.height=H*dpr;
   var ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
   var isDark=(document.documentElement.getAttribute('data-theme')||'dark')==='dark';
-  var cats=data.cats.filter(function(c){{return c.u.some(function(v){{return v>0;}});}});
-  var n=cats.length,NWEEKS=4;
-  if(n===0)return;
-  var NAME_W=76,PAD_T=16,PAD_B=4,PAD_R=6;
-  var CELL_W=Math.floor((W-NAME_W-PAD_R)/NWEEKS);
-  var CELL_H=Math.floor((H-PAD_T-PAD_B)/n);
   var t2=isDark?'#8892b0':'#556080';
   var t3=isDark?'#4a5270':'#8898b8';
-  var bd=isDark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)';
-  ['W1','W2','W3','W4'].forEach(function(lbl,wi){{
-    var cx=NAME_W+wi*CELL_W+CELL_W/2;
-    ctx.fillStyle=t3;ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillText(lbl,cx,PAD_T-4);
-  }});
-  cats.forEach(function(cat,ci){{
-    var maxU=Math.max.apply(null,cat.u)||1;
-    var ry=PAD_T+ci*CELL_H;
-    ctx.fillStyle=t2;ctx.font='10px sans-serif';ctx.textAlign='right';
-    var lbl=cat.name.length>10?cat.name.slice(0,9)+'…':cat.name;
-    ctx.fillText(lbl,NAME_W-4,ry+CELL_H/2+3.5);
-    for(var wi=0;wi<NWEEKS;wi++){{
-      var ratio=cat.u[wi]/maxU;
-      var alpha=0.12+ratio*0.78;
-      ctx.fillStyle='rgba(255,153,0,'+alpha.toFixed(2)+')';
-      ctx.fillRect(NAME_W+wi*CELL_W+1,ry+1,CELL_W-2,CELL_H-2);
+  var bd=isDark?'#2a2f4a':'#cdd2e8';
+  var COLORS=['#ff9900','#22c55e','#60a5fa','#f472b6','#a78bfa','#fb923c','#34d399','#f59e0b','#e879f9','#4ade80'];
+  var cats=data.cats.filter(function(c){{return c.u.some(function(v){{return v>0;}});}});
+  var NWEEKS=4;
+  if(cats.length===0)return;
+  var wkLabels=(data.weekIso||[29,30,31,32]).map(function(w){{return 'Sem '+w;}});
+  var LG_ROWS=Math.ceil(Math.min(cats.length,8)/4);
+  var LG_H=LG_ROWS*13+4;
+  var pad={{l:30,r:8,t:12,b:20+LG_H}};
+  var chartH=H-pad.t-pad.b;
+  var chartW=W-pad.l-pad.r;
+  var allVals=cats.reduce(function(a,c){{return a.concat(c.u);}}, []);
+  var maxV=Math.max.apply(null,allVals)*1.15||1;
+  // grid
+  ctx.strokeStyle=bd;ctx.lineWidth=0.5;
+  for(var gi=0;gi<=3;gi++){{
+    var gy=pad.t+chartH/3*gi;
+    ctx.beginPath();ctx.moveTo(pad.l,gy);ctx.lineTo(W-pad.r,gy);ctx.stroke();
+    if(gi<3){{
+      ctx.fillStyle=t3;ctx.font='8px sans-serif';ctx.textAlign='right';
+      ctx.fillText(Math.round(maxV/3*(3-gi)),pad.l-3,gy+3);
     }}
-    if(ci<n-1){{ctx.strokeStyle=bd;ctx.lineWidth=.5;ctx.beginPath();ctx.moveTo(0,ry+CELL_H);ctx.lineTo(W,ry+CELL_H);ctx.stroke();}}
+  }}
+  // x labels
+  for(var wi=0;wi<NWEEKS;wi++){{
+    var x=pad.l+chartW/(NWEEKS>1?NWEEKS-1:1)*wi;
+    ctx.fillStyle=t3;ctx.font='bold 8px sans-serif';ctx.textAlign='center';
+    ctx.fillText(wkLabels[wi],x,H-pad.b+10);
+  }}
+  // lines + dots
+  cats.forEach(function(cat,ci){{
+    var color=COLORS[ci%COLORS.length];
+    ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.globalAlpha=0.85;
+    ctx.beginPath();
+    for(var wi=0;wi<NWEEKS;wi++){{
+      var x=pad.l+chartW/(NWEEKS>1?NWEEKS-1:1)*wi;
+      var y=pad.t+chartH-(cat.u[wi]/maxV)*chartH;
+      if(wi===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+    }}
+    ctx.stroke();ctx.globalAlpha=1;
+    for(var wi=0;wi<NWEEKS;wi++){{
+      var x=pad.l+chartW/(NWEEKS>1?NWEEKS-1:1)*wi;
+      var y=pad.t+chartH-(cat.u[wi]/maxV)*chartH;
+      ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);ctx.fill();
+    }}
+  }});
+  // legend (grid, 4 per row)
+  var ly=H-LG_H+2;
+  cats.slice(0,8).forEach(function(cat,ci){{
+    var color=COLORS[ci%COLORS.length];
+    var col=ci%4,row=Math.floor(ci/4);
+    var lx=pad.l+col*Math.floor(chartW/4);
+    var ley=ly+row*13;
+    ctx.fillStyle=color;ctx.fillRect(lx,ley+4,10,2);
+    ctx.fillStyle=t2;ctx.font='8px sans-serif';ctx.textAlign='left';
+    var nm=cat.name.length>9?cat.name.slice(0,8)+'…':cat.name;
+    ctx.fillText(nm,lx+13,ley+8);
   }});
 }}
 
@@ -895,18 +980,20 @@ function drawAllCharts(code){{
 
 // Grafico historico
 var _histColors=['#ff9900','#22c55e','#60a5fa','#f472b6','#a78bfa','#34d399','#fb923c','#f59e0b','#e879f9'];
+function getMktU(d,code){{var m=d.markets[code];return m?m.u:0;}}
+
 function buildHistBtns(){{
   var div=document.getElementById('hist-mkt-btns');
   if(!div)return;
-  MKT_LIST.forEach(function(m,i){{
+  MKT_LIST.forEach(function(m){{
     var b=document.createElement('button');
-    b.className='btn-hist'+(m.code==='{default_mkt}'?' on':'');
+    b.className='btn-hist'+(m.code===_activeMkt?' on':'');
     b.id='hbtn-'+m.code;
     b.textContent=m.flag+' '+m.code;
     b.onclick=(function(code){{return function(){{
       var idx=_histMkts.indexOf(code);
-      if(idx>=0){{_histMkts.splice(idx,1);document.getElementById('hbtn-'+code).classList.remove('on');}}
-      else{{_histMkts.push(code);document.getElementById('hbtn-'+code).classList.add('on');}}
+      if(idx>=0&&_histMkts.length>1){{_histMkts.splice(idx,1);document.getElementById('hbtn-'+code).classList.remove('on');}}
+      else if(idx<0){{_histMkts.push(code);document.getElementById('hbtn-'+code).classList.add('on');}}
       drawHistChart();
     }}}})(m.code);
     div.appendChild(b);
@@ -921,7 +1008,6 @@ function drawHistChart(){{
   canvas.width=W*dpr;canvas.height=H*dpr;
   var ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
   var isDark=(document.documentElement.getAttribute('data-theme')||'dark')==='dark';
-  var t1=isDark?'#dde3f5':'#131728';
   var t2=isDark?'#8892b0':'#556080';
   var t3=isDark?'#4a5270':'#8898b8';
   var bd=isDark?'#2a2f4a':'#cdd2e8';
@@ -929,9 +1015,7 @@ function drawHistChart(){{
   var n=HIST_DATA.length;
   if(n===0)return;
   var allVals=[];
-  HIST_DATA.forEach(function(d){{
-    _histMkts.forEach(function(c){{allVals.push(d.markets[c]||0);}});
-  }});
+  HIST_DATA.forEach(function(d){{_histMkts.forEach(function(c){{allVals.push(getMktU(d,c));}});}});
   var maxV=Math.max.apply(null,allVals)*1.15||10;
   var cw=(W-pad.l-pad.r)/(n>1?n-1:1);
   // grid
@@ -943,44 +1027,82 @@ function drawHistChart(){{
     ctx.fillText(Math.round(maxV/4*(4-gi)),pad.l-4,gy+3);
   }}
   // lines per market
-  _histMkts.forEach(function(code,mi){{
+  _histMkts.forEach(function(code){{
+    var isActive=code===_activeMkt;
     var color=_histColors[MKT_LIST.findIndex(function(m){{return m.code===code;}})]||'#888';
-    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.lineJoin='round';
+    ctx.strokeStyle=color;ctx.lineWidth=isActive?2.5:1.5;ctx.lineJoin='round';
+    ctx.globalAlpha=isActive?1:0.55;
     ctx.beginPath();
     var started=false;
     HIST_DATA.forEach(function(d,i){{
-      var v=d.markets[code]||0;
+      var v=getMktU(d,code);
       var x=pad.l+i*cw;
       var y=H-pad.b-(v/maxV)*(H-pad.t-pad.b);
       if(!started){{ctx.moveTo(x,y);started=true;}}else ctx.lineTo(x,y);
     }});
-    ctx.stroke();
-    // dots
+    ctx.stroke();ctx.globalAlpha=1;
     HIST_DATA.forEach(function(d,i){{
-      var v=d.markets[code]||0;
+      var v=getMktU(d,code);
       var x=pad.l+i*cw;
       var y=H-pad.b-(v/maxV)*(H-pad.t-pad.b);
-      ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=color;ctx.globalAlpha=isActive?1:0.6;
+      ctx.beginPath();ctx.arc(x,y,isActive?3.5:2,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
     }});
   }});
-  // x labels
+  // x labels — "Sem 29\n13-19 Jul"
   HIST_DATA.forEach(function(d,i){{
-    if(n<=12||i%Math.ceil(n/10)===0){{
+    if(n<=16||i%Math.ceil(n/12)===0){{
       var x=pad.l+i*cw;
-      ctx.fillStyle=t3;ctx.font='8px sans-serif';ctx.textAlign='center';
-      ctx.fillText('W'+d.iso,x,H-pad.b+10);
+      ctx.fillStyle=t3;ctx.font='bold 8px sans-serif';ctx.textAlign='center';
+      ctx.fillText('S'+d.iso,x,H-pad.b+10);
+      if(d.label){{ctx.font='7px sans-serif';ctx.fillText(d.label.slice(0,7),x,H-pad.b+19);}}
     }}
   }});
   // legend
   var lx=pad.l;
-  _histMkts.forEach(function(code,mi){{
+  _histMkts.forEach(function(code){{
     var color=_histColors[MKT_LIST.findIndex(function(m){{return m.code===code;}})]||'#888';
     var mkt=MKT_LIST.find(function(m){{return m.code===code;}});
     ctx.fillStyle=color;ctx.fillRect(lx,pad.t-1,16,3);
-    ctx.fillStyle=t2;ctx.font='9px sans-serif';ctx.textAlign='left';
+    ctx.fillStyle=t2;ctx.font=(code===_activeMkt?'bold ':'')+'9px sans-serif';ctx.textAlign='left';
     ctx.fillText((mkt?mkt.flag+' ':'')+code,lx+20,pad.t+6);
-    lx+=70;
+    lx+=72;
   }});
+}}
+
+// Week snapshot para semanas archivadas
+function showWkSnap(btn,key){{
+  var already=btn.classList.contains('active');
+  document.querySelectorAll('.wk-chip').forEach(function(b){{b.classList.remove('active');}});
+  var snap=document.getElementById('wk-snap');
+  snap.style.display='none';
+  if(already)return;
+  btn.classList.add('active');
+  var d=HIST_DATA.find(function(x){{return x.key===key;}});
+  if(!d)return;
+  var mkt=d.markets[_activeMkt];
+  var html='<div class="snap-hdr"><strong>Sem '+d.iso+' · '+d.label+'</strong>'
+          +'<span class="snap-mkt">'+_activeMkt+'</span>'
+          +'<button class="snap-close" onclick="(function(){{document.getElementById(\'wk-snap\').style.display=\'none\';document.querySelectorAll(\'.wk-chip\').forEach(function(b){{b.classList.remove(\'active\');}});}})()">×</button></div>';
+  if(!mkt){{
+    html+='<div class="snap-empty">Sin datos para '+_activeMkt+' en esta semana</div>';
+  }}else{{
+    html+='<div style="font-size:11px;color:var(--t2);margin-bottom:8px"><strong style="color:var(--acc2)">'+mkt.u+'</strong> uds';
+    if(mkt.r)html+=' · <strong>'+mkt.r+'</strong>';
+    html+='</div>';
+    if(mkt.cats&&Object.keys(mkt.cats).length){{
+      html+='<div class="snap-cats">';
+      Object.keys(mkt.cats).forEach(function(cat){{
+        var v=mkt.cats[cat];
+        html+='<div class="snap-cat"><span class="sc-name">'+cat+'</span>'
+             +'<span class="sc-u">'+v.u+' uds</span>';
+        if(v.r)html+='<span class="sc-r">'+v.r+'</span>';
+        html+='</div>';
+      }});
+      html+='</div>';
+    }}
+  }}
+  snap.innerHTML=html;snap.style.display='';
 }}
 
 // Init
