@@ -1049,7 +1049,7 @@ function drawHistChart(){{
       ctx.beginPath();ctx.arc(x,y,isActive?3.5:2,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
     }});
   }});
-  // x labels — "Sem 29\n13-19 Jul"
+  // x labels
   HIST_DATA.forEach(function(d,i){{
     if(n<=16||i%Math.ceil(n/12)===0){{
       var x=pad.l+i*cw;
@@ -1071,6 +1071,11 @@ function drawHistChart(){{
 }}
 
 // Week snapshot para semanas archivadas
+function closeWkSnap(){{
+  var ws=document.getElementById('wk-snap');
+  if(ws)ws.style.display='none';
+  document.querySelectorAll('.wk-chip').forEach(function(b){{b.classList.remove('active');}});
+}}
 function showWkSnap(btn,key){{
   var already=btn.classList.contains('active');
   document.querySelectorAll('.wk-chip').forEach(function(b){{b.classList.remove('active');}});
@@ -1081,9 +1086,9 @@ function showWkSnap(btn,key){{
   var d=HIST_DATA.find(function(x){{return x.key===key;}});
   if(!d)return;
   var mkt=d.markets[_activeMkt];
-  var html='<div class="snap-hdr"><strong>Sem '+d.iso+' · '+d.label+'</strong>'
+  var html='<div class="snap-hdr"><strong>Sem '+d.iso+' \xb7 '+d.label+'</strong>'
           +'<span class="snap-mkt">'+_activeMkt+'</span>'
-          +'<button class="snap-close" onclick="(function(){{document.getElementById(\'wk-snap\').style.display=\'none\';document.querySelectorAll(\'.wk-chip\').forEach(function(b){{b.classList.remove(\'active\');}});}})()">×</button></div>';
+          +'<button class="snap-close" onclick="closeWkSnap()">×</button></div>';
   if(!mkt){{
     html+='<div class="snap-empty">Sin datos para '+_activeMkt+' en esta semana</div>';
   }}else{{
