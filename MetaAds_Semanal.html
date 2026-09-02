@@ -1,0 +1,248 @@
+<title>Informe Semanal Meta Ads — Finocam</title>
+<style>
+  :root{
+    --blue:#2563eb; --blue-light:#eff6ff;
+    --green:#16a34a; --green-light:#f0fdf4;
+    --amber:#d97706; --amber-light:#fffbeb;
+    --red:#dc2626; --red-light:#fef2f2;
+    --bg:#f8fafc; --card:#ffffff; --border:#e2e8f0;
+    --text:#0f172a; --text-muted:#64748b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); margin:0; padding:24px; line-height:1.5;
+  }
+  .wrap{max-width:1080px;margin:0 auto;}
+  header.top{
+    background:linear-gradient(135deg,var(--blue) 0%,#1e40af 100%);
+    color:#fff; border-radius:16px; padding:28px 32px; margin-bottom:20px;
+  }
+  header.top h1{margin:0 0 6px 0; font-size:1.6rem;}
+  header.top .range{opacity:.9; font-size:.95rem;}
+  .kpi-row{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px;}
+  .kpi{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px;}
+  .kpi .label{font-size:.78rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px;}
+  .kpi .value{font-size:1.5rem; font-weight:700;}
+  .kpi .sub{font-size:.78rem; color:var(--text-muted); margin-top:4px;}
+  .tabs{background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden;}
+  .tab-labels{display:flex; flex-wrap:wrap; border-bottom:1px solid var(--border); background:#f1f5f9;}
+  .tab-labels label{
+    padding:13px 18px; cursor:pointer; font-size:.9rem; font-weight:600; color:var(--text-muted);
+    border-bottom:3px solid transparent; user-select:none;
+  }
+  .tab-panels{padding:24px;}
+  .tab-panel{display:none;}
+  input[type=radio]{display:none;}
+  #tab1:checked ~ .tabs .tab-labels label[for=tab1],
+  #tab2:checked ~ .tabs .tab-labels label[for=tab2],
+  #tab3:checked ~ .tabs .tab-labels label[for=tab3],
+  #tab4:checked ~ .tabs .tab-labels label[for=tab4],
+  #tab5:checked ~ .tabs .tab-labels label[for=tab5],
+  #tab6:checked ~ .tabs .tab-labels label[for=tab6]{
+    color:var(--blue); border-bottom-color:var(--blue); background:#fff;
+  }
+  #tab1:checked ~ .tabs .tab-panels #panel1,
+  #tab2:checked ~ .tabs .tab-panels #panel2,
+  #tab3:checked ~ .tabs .tab-panels #panel3,
+  #tab4:checked ~ .tabs .tab-panels #panel4,
+  #tab5:checked ~ .tabs .tab-panels #panel5,
+  #tab6:checked ~ .tabs .tab-panels #panel6{display:block;}
+
+  h3{margin-top:0; font-size:1.05rem;}
+  .note{font-size:.85rem; color:var(--text-muted); margin:8px 0 18px 0;}
+  .bars{display:flex; flex-direction:column; gap:10px; margin:16px 0;}
+  .bar-row{display:grid; grid-template-columns:230px 1fr 70px; align-items:center; gap:10px; font-size:.83rem;}
+  .bar-name{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .bar-track{background:#f1f5f9; border-radius:6px; height:20px; position:relative;}
+  .bar-fill{background:linear-gradient(90deg,var(--blue),#60a5fa); height:100%; border-radius:6px;}
+  .bar-val{text-align:right; font-weight:600;}
+
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{text-align:left; padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top;}
+  th{color:var(--text-muted); font-weight:600; font-size:.75rem; text-transform:uppercase; letter-spacing:.03em;}
+  .badge{display:inline-block; padding:2px 9px; border-radius:999px; font-size:.78rem; font-weight:700;}
+  .badge.green{background:var(--green-light); color:var(--green);}
+  .badge.amber{background:var(--amber-light); color:var(--amber);}
+  .badge.red{background:var(--red-light); color:var(--red);}
+  .cell-note{color:var(--text-muted); font-size:.8rem;}
+
+  .opp-card{border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin-bottom:14px; background:#fafcff;}
+  .opp-card h4{margin:0 0 6px 0; font-size:.95rem;}
+  .opp-card .tag{display:inline-block; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 8px; border-radius:6px; margin-bottom:8px;}
+  .tag.pub{background:var(--amber-light); color:var(--amber);}
+  .tag.remanente{background:var(--blue-light); color:var(--blue);}
+  .opp-card .just{font-size:.85rem; color:var(--text);}
+  .opp-card .just b{color:var(--blue);}
+
+  ul.plain{margin:6px 0; padding-left:20px; font-size:.88rem;}
+  ul.plain li{margin-bottom:8px;}
+
+  footer{margin-top:20px; font-size:.78rem; color:var(--text-muted); text-align:center; padding:12px 0;}
+  footer a{color:var(--blue);}
+
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0b1220; --card:#111a2b; --border:#1f2c44; --text:#e5edff; --text-muted:#93a4c3;
+      --blue-light:#0f2650; --green-light:#0c2a17; --amber-light:#3a2705; --red-light:#3a1113;
+    }
+    .tab-labels{background:#0d1626;}
+    .bar-track{background:#1a2540;}
+    .opp-card{background:#0d1728;}
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Informe Semanal Meta Ads — Finocam</h1>
+    <div class="range">Semana del 24 al 30 de agosto de 2026 (lunes–domingo)</div>
+  </header>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="label">Gasto semana</div><div class="value">391,02 €</div></div>
+    <div class="kpi"><div class="label">Gasto mes en curso (agosto)</div><div class="value">1.058,84 €</div><div class="sub">Fuente: dashboard cliente</div></div>
+    <div class="kpi"><div class="label">Alcance semana</div><div class="value">271.421</div></div>
+    <div class="kpi"><div class="label">CTR semana</div><div class="value">0,85 %</div></div>
+    <div class="kpi"><div class="label">CPM semana</div><div class="value">0,95 €</div></div>
+  </div>
+
+  <input type="radio" name="tabs" id="tab1" checked>
+  <input type="radio" name="tabs" id="tab2">
+  <input type="radio" name="tabs" id="tab3">
+  <input type="radio" name="tabs" id="tab4">
+  <input type="radio" name="tabs" id="tab5">
+  <input type="radio" name="tabs" id="tab6">
+
+  <div class="tabs">
+    <div class="tab-labels">
+      <label for="tab1">Resumen</label>
+      <label for="tab2">Campañas</label>
+      <label for="tab3">Oportunidades de inversión</label>
+      <label for="tab4">Decisiones</label>
+      <label for="tab5">Presupuesto</label>
+      <label for="tab6">Pendientes</label>
+    </div>
+
+    <div class="tab-panels">
+
+      <div class="tab-panel" id="panel1">
+        <h3>Gasto por campaña — semana del 24 al 30 de agosto</h3>
+        <div class="bars">
+          <div class="bar-row"><div class="bar-name">TRÁFICO – Curso 26/27_AO – Reel 02.06</div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div><div class="bar-val">78,46 €</div></div>
+          <div class="bar-row"><div class="bar-name">NOTORIEDAD – Curso Talkual_AO</div><div class="bar-track"><div class="bar-fill" style="width:67.6%"></div></div><div class="bar-val">53,04 €</div></div>
+          <div class="bar-row"><div class="bar-name">NOTORIEDAD – Curso 26/27_AO – Reel 02.06</div><div class="bar-track"><div class="bar-fill" style="width:65.1%"></div></div><div class="bar-val">51,08 €</div></div>
+          <div class="bar-row"><div class="bar-name">TRÁFICO – Docente – Carousel 08.06</div><div class="bar-track"><div class="bar-fill" style="width:37.6%"></div></div><div class="bar-val">29,53 €</div></div>
+          <div class="bar-row"><div class="bar-name">NOTORIEDAD – Ag. Moniquilla – Reel 15.06</div><div class="bar-track"><div class="bar-fill" style="width:34.7%"></div></div><div class="bar-val">27,22 €</div></div>
+          <div class="bar-row"><div class="bar-name">NOTORIEDAD – Cuaderno Moniquilla</div><div class="bar-track"><div class="bar-fill" style="width:33.8%"></div></div><div class="bar-val">26,49 €</div></div>
+          <div class="bar-row"><div class="bar-name">TRÁFICO – Ag. Moniquilla – Carousel 13.07</div><div class="bar-track"><div class="bar-fill" style="width:33.7%"></div></div><div class="bar-val">26,43 €</div></div>
+          <div class="bar-row"><div class="bar-name">TRÁFICO – Planificador Haiku – Carrousel 03.08</div><div class="bar-track"><div class="bar-fill" style="width:28.9%"></div></div><div class="bar-val">22,65 €</div></div>
+          <div class="bar-row"><div class="bar-name">NOTORIEDAD – Bari_AO</div><div class="bar-track"><div class="bar-fill" style="width:28%"></div></div><div class="bar-val">21,97 €</div></div>
+          <div class="bar-row"><div class="bar-name">NOTORIEDAD – Ag. Haiku – Reel 29.06</div><div class="bar-track"><div class="bar-fill" style="width:27.6%"></div></div><div class="bar-val">21,66 €</div></div>
+          <div class="bar-row"><div class="bar-name">TRÁFICO – Ag. Haiku – Carousel 10.07</div><div class="bar-track"><div class="bar-fill" style="width:27.3%"></div></div><div class="bar-val">21,44 €</div></div>
+          <div class="bar-row"><div class="bar-name">NOTORIEDAD – Planificador Haiku – Reel 19.06</div><div class="bar-track"><div class="bar-fill" style="width:14.1%"></div></div><div class="bar-val">11,05 €</div></div>
+        </div>
+        <div class="note">
+          El gasto de agosto (cierre de mes, 1.058,84&nbsp;€) queda un 8,6&nbsp;% por encima de julio (975,39&nbsp;€), pero con una eficiencia muy superior: el CPC medio del mes bajó de 0,46&nbsp;€ a 0,15&nbsp;€ (-67&nbsp;%) y el CTR subió de 0,14&nbsp;% a 0,47&nbsp;% (+236&nbsp;%). La mejora se explica por el mayor peso de campañas de tráfico bien optimizadas (Curso 26/27, Docente), frente a un agosto con más volumen destinado a notoriedad/reproducciones en julio. <em>Fuente: dashboard Looker Studio, serie mensual.</em>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel2">
+        <h3>Detalle por campaña — semana del 24 al 30 de agosto</h3>
+        <table>
+          <thead><tr><th>Campaña</th><th>Objetivo</th><th>Gasto</th><th>CTR</th><th>CPM</th><th>Nota</th></tr></thead>
+          <tbody>
+            <tr><td>TRÁFICO – Curso 26/27_AO – Reel 02.06</td><td>Tráfico</td><td>78,46 €</td><td><span class="badge amber">1,62 %</span></td><td>1,45 €</td><td class="cell-note">Mejor campaña de la semana en clics (873, CPC 0,09 €). Tras la reunión del 25.08 se cambió su optimización a clics; para septiembre ya tiene 300 € confirmados (01–13.09).</td></tr>
+            <tr><td>NOTORIEDAD – Curso Talkual_AO</td><td>Notoriedad</td><td>53,04 €</td><td><span class="badge red">0,11 %</span></td><td><span class="badge red">2,37 €</span></td><td class="cell-note">CPM más alto de la semana. El 19.08 se restringió la audiencia solo a Instagram y ≤54 años para forzar la entrega del algoritmo; a vigilar si mejora la próxima semana.</td></tr>
+            <tr><td>NOTORIEDAD – Curso 26/27_AO – Reel 02.06</td><td>Notoriedad</td><td>51,08 €</td><td class="cell-note">n/a (objetivo reproducciones)</td><td><span class="badge amber">0,64 €</span></td><td class="cell-note">Pausada a mitad de semana, dejando ≈75 € sin gastar de su tope de agosto (298 €). Ver pestaña Oportunidades: se plantea traspasar el remanente a la versión de tráfico, más eficiente.</td></tr>
+            <tr><td>TRÁFICO – Docente – Carousel 08.06</td><td>Tráfico</td><td>29,53 €</td><td><span class="badge green">2,53 %</span></td><td>1,19 €</td><td class="cell-note">Reactivada el 20.08 tras haberse pausado en julio (el presupuesto se desvió entonces a influencer marketing); vuelve a rendir con el mejor CTR de las de tráfico.</td></tr>
+            <tr><td>NOTORIEDAD – Ag. Moniquilla – Reel 15.06</td><td>Notoriedad</td><td>27,22 €</td><td class="cell-note">0,99 %</td><td><span class="badge amber">1,20 €</span></td><td class="cell-note">CPM en el límite alto para un objetivo de alcance; sin incidencias reportadas en el tracker esta semana.</td></tr>
+            <tr><td>NOTORIEDAD – Cuaderno Moniquilla</td><td>Notoriedad</td><td>26,49 €</td><td class="cell-note">0,26 %</td><td><span class="badge green">0,57 €</span></td><td class="cell-note">Buen CPM para un objetivo de alcance; campaña estable desde mayo.</td></tr>
+            <tr><td>TRÁFICO – Ag. Moniquilla – Carousel 13.07</td><td>Tráfico</td><td>26,43 €</td><td><span class="badge green">2,06 %</span></td><td>1,23 €</td><td class="cell-note">Estable, sin incidencias reportadas esta semana.</td></tr>
+            <tr><td>TRÁFICO – Planificador Haiku – Carrousel 03.08</td><td>Tráfico</td><td>22,65 €</td><td><span class="badge green">2,20 %</span></td><td>1,36 €</td><td class="cell-note">Buen ratio coste/clic (CPC 0,06 €); candidata a ampliar presupuesto (ver Oportunidades).</td></tr>
+            <tr><td>NOTORIEDAD – Bari_AO</td><td>Notoriedad</td><td>21,97 €</td><td class="cell-note">0,08 %</td><td><span class="badge green">0,39 €</span></td><td class="cell-note">El CPM más bajo de la semana; campaña de awareness de recorrido largo, sin cambios.</td></tr>
+            <tr><td>NOTORIEDAD – Ag. Haiku – Reel 29.06</td><td>Notoriedad</td><td>21,66 €</td><td class="cell-note">0,19 %</td><td><span class="badge green">0,53 €</span></td><td class="cell-note">CTR bajo esperable en un objetivo de notoriedad; CPM saludable. Audiencia abierta el 25.08 (solo edad/sexo, sin intereses).</td></tr>
+            <tr><td>TRÁFICO – Ag. Haiku – Carousel 10.07</td><td>Tráfico</td><td>21,44 €</td><td><span class="badge green">2,55 %</span></td><td>1,37 €</td><td class="cell-note">El mejor CTR de la semana. Para septiembre se decidió reutilizar también el reel de notoriedad dentro de esta campaña de tráfico.</td></tr>
+            <tr><td>NOTORIEDAD – Planificador Haiku – Reel 19.06</td><td>Notoriedad</td><td>11,05 €</td><td class="cell-note">0,49 %</td><td><span class="badge red">1,26 €</span></td><td class="cell-note">CPM más alto de lo habitual tras abrir la audiencia el 27.08; normal en fase de aprendizaje, a vigilar la semana que viene.</td></tr>
+          </tbody>
+        </table>
+        <div class="note">Badges de CTR para campañas de Tráfico (verde ≥2 %, ámbar 1–2 %, rojo &lt;1 %); badges de CPM para campañas de Notoriedad (verde &lt;0,6 €, ámbar 0,6–1,2 €, rojo &gt;1,2 €), ya que en notoriedad el CTR bajo no es un problema en sí mismo.</div>
+      </div>
+
+      <div class="tab-panel" id="panel3">
+        <h3>Publicaciones sin pauta prevista — candidatas a impulso</h3>
+        <div class="opp-card">
+          <span class="tag pub">Sin pauta</span>
+          <h4>4 septiembre · Single Image "Ag. Cloe 16M" (lanzamiento producto)</h4>
+          <div class="just">Es la única agenda nueva de 16 meses del calendario de septiembre <b>sin ninguna campaña asociada</b> en el tracker (Vitae, Dotted, Tempus e Ikon sí tienen o tendrán pauta). Al ser contenido de lanzamiento en pleno pico de intención "vuelta al cole", es la prioridad más clara para asignar presupuesto de calaix.</div>
+        </div>
+        <div class="opp-card">
+          <span class="tag pub">Sin pauta</span>
+          <h4>11 septiembre · Carrousel "Ag. Cool" (curso 2026-2027)</h4>
+          <div class="just">Formato carrusel de producto sin campaña prevista. Esta misma semana, el carrusel de Planificador Haiku (mismo formato) logró un CTR del 2,2&nbsp;% con un CPC de solo 0,06&nbsp;€ — un precedente que sugiere que un carrusel de Ag. Cool bien pautado podría rendir de forma similar.</div>
+        </div>
+        <div class="opp-card">
+          <span class="tag pub">Sin pauta</span>
+          <h4>28 septiembre · Carrousel "Ag. Ikon 16M"</h4>
+          <div class="just">Del bloque de agendas de 16 meses (Cloe, Vitae, Cool, Dotted, Tempus, Ikon) planificadas para septiembre, Ikon es la única que no aparece en ningún momento en el tracker de campañas, ni activa ni propuesta. Dado que el resto de la familia 16M sí recibe inversión, conviene decidir explícitamente si se incluye o se descarta.</div>
+        </div>
+        <div class="opp-card">
+          <span class="tag pub">Sin pauta</span>
+          <h4>16 septiembre · Single Image "Ag. Vitae 16M" (pieza de engagement)</h4>
+          <div class="just">Es la segunda pieza sobre Vitae del mes, sin campaña propia (la única pauta de Vitae es el reel de notoriedad del 09.09/14.09, 235&nbsp;€). Candidata secundaria: valorar reforzarla solo si el reel de Vitae confirma buen rendimiento la primera quincena.</div>
+        </div>
+
+        <h3 style="margin-top:26px;">Campañas activas con remanente para ampliar</h3>
+        <div class="opp-card">
+          <span class="tag remanente">Remanente</span>
+          <h4>NOTORIEDAD – Curso 26/27_AO (Reel 02.06) → traspaso a TRÁFICO – Curso 26/27_AO</h4>
+          <div class="just">
+            La versión de notoriedad se pausó a mitad de la semana del 24–30.08 con un tope mensual de 298,30&nbsp;€ del que solo se gastaron 223,19&nbsp;€: quedan <b>≈75&nbsp;€ sin ejecutar</b>.
+            En ese mismo periodo, la versión de tráfico del mismo material fue la campaña más eficiente de la semana: 873 clics a un CPC de 0,09&nbsp;€ (frente a un CPM de 0,64&nbsp;€ y sin clics directos en la de notoriedad).
+            Moisés ya ha planteado a Marta (correo 31.08) repartir presupuesto entre ambas si la de tráfico sigue rindiendo mejor — este remanente de agosto es el candidato natural para esa redistribución de cara a septiembre.
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel4">
+        <h3>Decisiones de la semana</h3>
+        <ul class="plain">
+          <li><b>Reunión 25.08 (Acta):</b> en NOTORIEDAD – Curso 26/27_AO se cambia el objetivo de optimización a clics, usando el presupuesto restante de agosto más el de septiembre; la campaña debe mantenerse activa hasta el 13.09 (fin de semana de inicio de curso).</li>
+          <li>En NOTORIEDAD – Planificador Haiku y NOTORIEDAD – Ag. Haiku se abre la audiencia (solo edad y sexo, sin intereses, en configuración manual porque Advantage+ no permite limitar el rango superior de edad).</li>
+          <li>Durante septiembre, el reel de Ag. Haiku (29.06) se reutilizará también en la campaña de tráfico del carrusel (10.07).</li>
+          <li>Se detecta que los UTM con inserción dinámica no aportan información útil en los informes nativos de GA4 (el "placement" solo indica "Meta Ads"); se resuelve usando una exploración personalizada en GA4, que además corrige inconsistencias de canal/fuente.</li>
+          <li><b>31.08:</b> Moisés propone a Marta la continuidad y presupuestos concretos de 10 campañas para septiembre (BARI, Cuaderno Moniquilla, Curso Talkual, Ag. Moniquilla, Planificador Haiku, Ag. Haiku ×2, Ag. Moniquilla tráfico, Planificador Haiku tráfico, Curso 26/27 tráfico).</li>
+          <li><b>Respuesta de Marta (31.08):</b> confirma que septiembre se divide en dos quincenas — hasta el 15 continúan 16&nbsp;Meses y Curso; desde el 15 debería arrancar la campaña anual de agendas, aunque a día de hoy no está confirmado si habrá materiales listos (hay un plan de "mínimos"). La propuesta de Moisés se da por OK a priori, pendiente de repasarlo en la reunión del 01.09.</li>
+        </ul>
+      </div>
+
+      <div class="tab-panel" id="panel5">
+        <h3>Presupuesto</h3>
+        <ul class="plain">
+          <li>El Sheet de presupuesto marca un presupuesto anual 26-27 de <b>18.950&nbsp;€</b>, con una inversión registrada de <b>2.601&nbsp;€</b> y un "RESTA" (calculado por el propio sheet) de <b>16.349&nbsp;€</b>.</li>
+          <li><b>El Sheet no está actualizado desde julio:</b> su tabla de gasto real ("FB ADSPEND") muestra 0,00&nbsp;€ tanto en agosto como en septiembre, mientras que el dashboard de Metricool confirma un gasto real en agosto de 1.058,84&nbsp;€ — el mayor mes de inversión hasta la fecha. Recomendable actualizar el sheet cuanto antes para no perder trazabilidad.</li>
+          <li>Usando el dato real del dashboard (serie mensual acumulada abr–ago: 49,87 + 238,47 + 915,04 + 975,39 + 1.058,84 = <b>3.237,61&nbsp;€</b>), la ejecución real acumulada equivale a ≈17&nbsp;% del presupuesto anual total a cierre de agosto.</li>
+          <li>Contexto: en julio se había detectado que solo se había ejecutado un 7&nbsp;% del presupuesto de mayo-junio frente a un objetivo del 50&nbsp;%. Con los datos reales de julio (975,39&nbsp;€) y agosto (1.058,84&nbsp;€) —los dos meses de mayor gasto de la serie— el ritmo mensual parece haberse corregido al alza, aunque no ha sido posible confirmar el % exacto vs. objetivo mensual de agosto porque el desglose por mes del sheet de presupuesto resulta ambiguo de leer en su formato actual y el sheet de gasto real no se ha actualizado.</li>
+          <li>Nota del propio sheet: se reasignan 250&nbsp;€ del presupuesto de Docente (julio, mitad de agosto y septiembre) a Influencer Marketing.</li>
+        </ul>
+      </div>
+
+      <div class="tab-panel" id="panel6">
+        <h3>Pendientes</h3>
+        <ul class="plain">
+          <li>Confirmar en la reunión del 01.09 (o la de resultados de agosto, aplazada por Moisés a hoy 13-14h o mañana) los presupuestos y timing exactos de septiembre para las 10 campañas propuestas por Moisés — Marta aún no los ha validado línea por línea.</li>
+          <li>Decidir qué piezas del content plan de septiembre sin pauta (Ag. Cloe, Ag. Cool, Ag. Ikon, 2ª pieza de Vitae) reciben presupuesto de calaix — Marta lo dejó abierto a valorar en el correo del 31.08.</li>
+          <li>Confirmar si habrá materiales listos para la campaña anual de agendas que debería arrancar el 15 de septiembre (a día 31.08 no estaba confirmado; hay un plan de "mínimos" de respaldo).</li>
+          <li>Decidir si el remanente de NOTORIEDAD – Curso 26/27_AO se traspasa definitivamente a la versión de tráfico, en función de si esta última mantiene su ventaja de rendimiento.</li>
+          <li>Actualizar el Sheet de presupuesto con el gasto real de agosto (y septiembre), actualmente en 0&nbsp;€.</li>
+          <li>Repasar formalmente los resultados completos de agosto con Marta (reunión pendiente a fecha de este informe).</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    Fuentes: Metricool (brandId 2216922, Meta Ads, 24–30/08/2026) · Dashboard Looker Studio Finocam (mes en curso = agosto, cerrado) · Sheet de presupuesto Cabero Group · Sheet tracker de campañas · Google Slides plan de contenido (sección Setembre) · Gmail, hilo "Acta 25.08" entre Marta Jarpa y Moisés Delgado (25.08–01.09.2026). Todas las fuentes fueron accesibles sin incidencias.<br>
+    Informe generado automáticamente el 01/09/2026.
+  </footer>
+</div>
