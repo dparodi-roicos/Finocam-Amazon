@@ -345,7 +345,7 @@ def tend_html(t):
     return f'<span class="t-dn">↓{abs(t):.0f}%</span>'
 
 def yoy_span(cur, prev, cur_label, prev_label, cls_prefix):
-    if not prev or prev < 5 or not cur: return ''
+    if not prev or prev < 1 or not cur: return ''
     pct = (cur - prev) / prev * 100
     if abs(pct) > 499: return ''
     delta = int(round(cur - prev))
@@ -353,7 +353,7 @@ def yoy_span(cur, prev, cur_label, prev_label, cls_prefix):
     dsign = '+' if delta >= 0 else ''
     cls = 'yb-up' if pct >= 0 else 'yb-dn'
     return (f'<span class="{cls_prefix} {cls}" title="vs {prev_label} año anterior">'
-            f'{sign}{pct:.0f}%&nbsp;<small>({dsign}{delta})</small></span>')
+            f'<small class="yoy-lbl">YOY</small>&nbsp;{sign}{pct:.0f}%&nbsp;<small>({dsign}{delta})</small></span>')
 
 def weight_badge(cat_u, total_u):
     if not total_u: return ''
@@ -451,7 +451,7 @@ def market_section(code, md, WEEKS):
     })
 
     wk_ths = ''.join(
-        f'<th class="wkh"><div class="wkl">Sem&nbsp;{w["iso_wk"]}</div><div class="wkd">{w["label"]}</div></th>'
+        f'<th class="wkh"><div class="wkl">Sem&nbsp;{w["iso_wk"]}</div><div class="wkd">{w["label"]}</div><div class="wkyoy">vs&nbsp;{w["iso_yr"]-1}</div></th>'
         for w in WEEKS
     )
     rows_html = build_rows(md['dash'], md['aw'], total_u, currency)
@@ -601,18 +601,20 @@ html = f'''<!DOCTYPE html>
   --bd:#2a2f4a;--bd2:#1a1f33;
   --t1:#dde3f5;--t2:#8892b0;--t3:#4a5270;
   --acc:#ff9900;--acc2:#ffb340;
-  --g:#22c55e;--gb:rgba(34,197,94,.09);--gbd:rgba(34,197,94,.4);
-  --y:#f59e0b;--yb:rgba(245,158,11,.09);--ybd:rgba(245,158,11,.4);
-  --r:#ef4444;--rb:rgba(239,68,68,.09);--rbd:rgba(239,68,68,.4);
+  --g:#22c55e;--gb:rgba(34,197,94,.18);--gbd:rgba(34,197,94,.60);
+  --y:#f59e0b;--yb:rgba(245,158,11,.18);--ybd:rgba(245,158,11,.60);
+  --r:#ef4444;--rb:rgba(239,68,68,.18);--rbd:rgba(239,68,68,.60);
+  --yb-up-c:#4ade80;--yb-dn-c:#f87171;
   --ff:'Segoe UI',system-ui,-apple-system,sans-serif;
   --ff-mono:'Cascadia Code','Consolas',monospace;
 }}
 @media(prefers-color-scheme:light){{:root{{
   --bg:#f0f2f8;--s1:#fff;--s2:#f7f9fe;--s3:#edf0f8;--s4:#e4e8f4;
   --bd:#cdd2e8;--bd2:#dde1f0;--t1:#131728;--t2:#556080;--t3:#8898b8;
+  --yb-up-c:#15803d;--yb-dn-c:#b91c1c;
 }}}}
-:root[data-theme="dark"]{{--bg:#090c14;--s1:#0f1320;--s2:#151929;--s3:#1d2235;--s4:#252b40;--bd:#2a2f4a;--bd2:#1a1f33;--t1:#dde3f5;--t2:#8892b0;--t3:#4a5270;}}
-:root[data-theme="light"]{{--bg:#f0f2f8;--s1:#fff;--s2:#f7f9fe;--s3:#edf0f8;--s4:#e4e8f4;--bd:#cdd2e8;--bd2:#dde1f0;--t1:#131728;--t2:#556080;--t3:#8898b8;}}
+:root[data-theme="dark"]{{--bg:#090c14;--s1:#0f1320;--s2:#151929;--s3:#1d2235;--s4:#252b40;--bd:#2a2f4a;--bd2:#1a1f33;--t1:#dde3f5;--t2:#8892b0;--t3:#4a5270;--yb-up-c:#4ade80;--yb-dn-c:#f87171;}}
+:root[data-theme="light"]{{--bg:#f0f2f8;--s1:#fff;--s2:#f7f9fe;--s3:#edf0f8;--s4:#e4e8f4;--bd:#cdd2e8;--bd2:#dde1f0;--t1:#131728;--t2:#556080;--t3:#8898b8;--yb-up-c:#15803d;--yb-dn-c:#b91c1c;}}
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:var(--bg);color:var(--t1);font-family:var(--ff);font-size:12px}}
 /* HEADER */
@@ -667,6 +669,7 @@ th.wkh{{min-width:88px;text-align:center;border-left:1px solid var(--bd2)}}
 .wkl{{font-size:11px;font-weight:700;color:var(--t2)}}
 sup.iso-w{{font-size:7px;color:var(--t3);font-weight:400;margin-left:2px}}
 .wkd{{font-size:9px;color:var(--t3);margin-top:1px}}
+.wkyoy{{font-size:8px;color:var(--acc);font-weight:600;margin-top:2px;opacity:.85}}
 th.tndh{{min-width:68px;text-align:center}}
 tr.rc td{{background:var(--s2);border-bottom:1px solid var(--bd);padding:10px 12px;transition:background .1s;cursor:pointer}}
 tr.rc td.nc{{border-left:4px solid transparent}}
@@ -709,14 +712,15 @@ tr.rc td.wk .wi{{padding:8px 6px;border-radius:8px}}
 .wu{{font-size:15px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}}
 tr.rc .wu{{font-size:18px}}
 .wi.cg .wu{{color:var(--g)}}.wi.cy .wu{{color:var(--y)}}.wi.cr .wu{{color:var(--r)}}.wi.cn .wu{{color:var(--t3)}}
-.wr{{font-size:9px;color:var(--t3);font-weight:400;margin-top:1px}}
+.wr{{font-size:9px;color:var(--t2);font-weight:400;margin-top:1px}}
 tr.rc .wr{{font-size:10px}}
 .wy{{margin-top:2px;display:flex;gap:2px;justify-content:center;flex-wrap:wrap}}
-.yy-u,.yy-r{{font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;white-space:nowrap}}
-.yy-u small,.yy-r small{{font-size:7px;font-weight:400}}
+.yy-u,.yy-r{{font-size:9px;font-weight:700;padding:2px 5px;border-radius:3px;white-space:nowrap}}
+.yy-u small,.yy-r small{{font-size:8px;font-weight:400}}
+.yoy-lbl{{font-size:7px;font-weight:600;opacity:.75;letter-spacing:.3px}}
 .yy-r{{display:none}}
-.yb-up{{background:rgba(34,197,94,.13);color:#4ade80}}
-.yb-dn{{background:rgba(239,68,68,.11);color:#f87171}}
+.yb-up{{background:rgba(34,197,94,.18);color:var(--yb-up-c)}}
+.yb-dn{{background:rgba(239,68,68,.16);color:var(--yb-dn-c)}}
 td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
 .t-up{{font-size:12px;font-weight:700;color:var(--g)}}
 .t-dn{{font-size:12px;font-weight:700;color:var(--r)}}
