@@ -81,10 +81,10 @@ def _auto_weeks():
     return out
 
 WEEKS = _auto_weeks() if os.environ.get('WEEKLY_AUTO') == '1' else [
-    {'label': '17–23 Ago', 'wk': 'W1', 'iso_wk': 34, 'iso_yr': 2026},
-    {'label': '24–30 Ago', 'wk': 'W2', 'iso_wk': 35, 'iso_yr': 2026},
-    {'label': '31 Ago–6 Sep', 'wk': 'W3', 'iso_wk': 36, 'iso_yr': 2026},
-    {'label': '7–13 Sep', 'wk': 'W4', 'iso_wk': 37, 'iso_yr': 2026},
+    {'label': '24–30 Ago', 'wk': 'W1', 'iso_wk': 35, 'iso_yr': 2026},
+    {'label': '31 Ago–6 Sep', 'wk': 'W2', 'iso_wk': 36, 'iso_yr': 2026},
+    {'label': '7–13 Sep', 'wk': 'W3', 'iso_wk': 37, 'iso_yr': 2026},
+    {'label': '15–21 Sep', 'wk': 'W4', 'iso_wk': 38, 'iso_yr': 2026},
 ]
 
 UPDATE_DATE = _dt.date.today().isoformat()
