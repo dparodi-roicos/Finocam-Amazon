@@ -56,7 +56,7 @@ def is_valid_anualidad(val):
 CAT_ORDER = [
     'Moniquilla', 'Talkual',
     'Agendas', 'Calendarios', 'Cuadernos',
-    'Planificadores', 'Libros de Firma', 'Indices',
+    'Planificadores', 'Libros de Firma', 'Índices',
     'Portadocumentos', 'Recambios',
     '_RESTO_',
 ]
@@ -81,10 +81,10 @@ def _auto_weeks():
     return out
 
 WEEKS = _auto_weeks() if os.environ.get('WEEKLY_AUTO') == '1' else [
-    {'label': '13–19 Jul', 'wk': 'W1', 'iso_wk': 29, 'iso_yr': 2026},
-    {'label': '20–26 Jul', 'wk': 'W2', 'iso_wk': 30, 'iso_yr': 2026},
-    {'label': '27 Jul–2 Ago', 'wk': 'W3', 'iso_wk': 31, 'iso_yr': 2026},
-    {'label': '3–9 Ago',  'wk': 'W4', 'iso_wk': 32, 'iso_yr': 2026},
+    {'label': '17–23 Ago', 'wk': 'W1', 'iso_wk': 34, 'iso_yr': 2026},
+    {'label': '24–30 Ago', 'wk': 'W2', 'iso_wk': 35, 'iso_yr': 2026},
+    {'label': '31 Ago–6 Sep', 'wk': 'W3', 'iso_wk': 36, 'iso_yr': 2026},
+    {'label': '7–13 Sep', 'wk': 'W4', 'iso_wk': 37, 'iso_yr': 2026},
 ]
 
 UPDATE_DATE = _dt.date.today().isoformat()
