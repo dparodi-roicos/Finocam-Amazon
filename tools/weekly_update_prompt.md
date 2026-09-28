@@ -27,7 +27,11 @@ Para ES: usa getChannels para obtener el merchantId del channelId=21907968.
 El script build_weekly.py con WEEKLY_AUTO=1 calcula las 4 semanas ISO completas mas recientes automaticamente.
 Los timestamps epoch los necesitas para MerchantSpring:
   - Calcula el lunes de la semana actual, luego resta 1-4 semanas para obtener W1-W4.
-  - Para cada semana Wi: epoch inicio = lunes 00:00:00 UTC, epoch fin = domingo 23:59:59 UTC
+  - Para cada semana Wi: epoch inicio = lunes 00:00:00, epoch fin = domingo 23:59:59, en HORA LOCAL de cada mercado
+    (columna tz de la tabla de mercados; ojo al cambio de hora). NO uses medianoche UTC: MerchantSpring guarda cada dia
+    a medianoche local y con epochs UTC devuelve la semana martes-lunes.
+    Ejemplo W39 2026: ES/FR/IT/DE/NL/BE/PL/SE 1789941600-1790546399, UK 1789945200-1790549999.
+    Comprobacion: el nombre del CSV descargado debe llevar lunes-domingo (p.ej. ...-2026_09_21-2026_09_27-...).
   - Prior = misma semana del año anterior (resta 52 semanas exactas)
 
 === PASO 2: Descargar datos de MerchantSpring (todos los mercados) ===
