@@ -345,9 +345,12 @@ def tend_html(t):
     return f'<span class="t-dn">↓{abs(t):.0f}%</span>'
 
 def yoy_span(cur, prev, cur_label, prev_label, cls_prefix):
-    if not prev or prev < 1 or not cur: return ''
+    if not cur or cur < 1: return ''
+    if not prev or prev < 1:
+        return (f'<span class="{cls_prefix} yb-new" title="Sin datos año anterior">'
+                f'<small class="yoy-lbl">YOY</small>&nbsp;N/A</span>')
     pct = (cur - prev) / prev * 100
-    if abs(pct) > 499: return ''
+    if abs(pct) > 999: return ''
     delta = int(round(cur - prev))
     sign = '+' if pct >= 0 else ''
     dsign = '+' if delta >= 0 else ''
@@ -721,6 +724,7 @@ tr.rc .wr{{font-size:10px}}
 .yy-r{{display:none}}
 .yb-up{{background:rgba(34,197,94,.18);color:var(--yb-up-c)}}
 .yb-dn{{background:rgba(239,68,68,.16);color:var(--yb-dn-c)}}
+.yb-new{{background:rgba(148,163,184,.15);color:var(--t3)}}
 td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
 .t-up{{font-size:12px;font-weight:700;color:var(--g)}}
 .t-dn{{font-size:12px;font-weight:700;color:var(--r)}}
