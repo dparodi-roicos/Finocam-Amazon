@@ -24,7 +24,7 @@ Finocam opera en 9 mercados Amazon Vendor. channelId y merchantId de cada uno:
 Para ES: usa getChannels para obtener el merchantId del channelId=21907968.
 
 === PASO 1: Calcular semanas ===
-El script build_weekly.py con WEEKLY_AUTO=1 calcula las 4 semanas ISO completas mas recientes automaticamente.
+El script build_weekly.py calcula las 4 semanas ISO completas mas recientes automaticamente.
 Los timestamps epoch los necesitas para MerchantSpring:
   - Calcula el lunes de la semana actual, luego resta 1-4 semanas para obtener W1-W4.
   - Para cada semana Wi: epoch inicio = lunes 00:00:00, epoch fin = domingo 23:59:59, en HORA LOCAL de cada mercado
@@ -32,7 +32,7 @@ Los timestamps epoch los necesitas para MerchantSpring:
     a medianoche local y con epochs UTC devuelve la semana martes-lunes.
     Ejemplo W39 2026: ES/FR/IT/DE/NL/BE/PL/SE 1789941600-1790546399, UK 1789945200-1790549999.
     Comprobacion: el nombre del CSV descargado debe llevar lunes-domingo (p.ej. ...-2026_09_21-2026_09_27-...).
-  - Prior = misma semana del año anterior (resta 52 semanas exactas)
+  - Prior = misma semana del año anterior (resta 52 semanas exactas al lunes). Se usa en el PASO 2b.
 
 === PASO 2: Descargar datos de MerchantSpring (todos los mercados) ===
 Para CADA mercado y CADA semana (W1-W4) llama a generateOrderedRevenueReport en paralelo.
@@ -49,10 +49,29 @@ Descarga el CSV y guárdalo en:
   - SE:  CSV_BASE\se\weekly_0.csv ... weekly_3.csv
 Total: 36 ficheros (9 mercados x 4 semanas).
 
+=== PASO 2b: Semanas del año anterior (YOY) ===
+El YOY de familias, subfamilias y total de mercado NO sale de las columnas prior* de los CSV del PASO 2: solo traen
+los ASIN que tienen fila este año y se quedan muy cortas (cada temporada las agendas son ASIN nuevos). Sale de
+informes de la misma semana del año anterior, descargados como periodo ACTUAL:
+  - Para cada mercado y cada una de las 4 semanas, comprueba si existe CSV_BASE\yoy\<mkt>\<AAAA>_W<ss>.csv
+    (AAAA y ss = año y semana ISO del lunes menos 52 semanas, ss con 2 cifras; <mkt> en minusculas:
+    es, fr, it, de, nl, be, pl, uk, se).
+  - Si falta, llama a generateOrderedRevenueReport con fromDate/toDate = esa semana del año anterior
+    (lunes 00:00:00 - domingo 23:59:59 en HORA LOCAL del mercado, igual que en el PASO 1; priorFromDate/priorToDate
+    pueden ser la misma semana un año antes) y guarda el CSV con ese nombre.
+    Ejemplo para la Sem 41 de 2026 -> CSV_BASE\yoy\<mkt>\2025_W41.csv:
+    ES/FR/IT/DE/NL/BE/PL/SE 1759701600-1760306399, UK 1759705200-1760309999 (CSV ...-2025_10_06-2025_10_12-...).
+  - Normalmente solo falta la semana mas reciente: 9 informes. Esos ficheros no cambian y no se suben a git
+    (.gitignore); el YOY calculado queda guardado en history.json.
+
 === PASO 3: Generar el dashboard ===
 Ejecuta en PowerShell:
   $env:WEEKLY_AUTO="1"
   python "C:\Users\Daniela\Desktop\Git Finocam\tools\build_weekly.py"
+Revisa la salida: si aparece "AVISO <mercado>: sin YOY de la Sem N", falta un fichero del PASO 2b; descargalo y
+vuelve a ejecutar el build antes de seguir.
+Si cambia el Màster Famílies, regenera los dos catalogos (actual y temporada anterior) con:
+  python "C:\Users\Daniela\Desktop\Git Finocam\tools\catalog_from_master.py" "<ruta al Màster .xlsx>"
 
 === PASO 4: Git push a GitHub Pages ===
   cd "C:\Users\Daniela\Desktop\Git Finocam"

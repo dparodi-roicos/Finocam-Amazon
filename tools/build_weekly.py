@@ -4,7 +4,9 @@ build_weekly.py — Dashboard semanal Amazon multi-mercado (v2)
 Genera un HTML interactivo con:
   - Pestañas por mercado (ES, FR, IT, DE, NL, BE, PL, UK, SE)
   - Semáforo por semana (>=90% media=verde, 60-89%=ambar, <60%=rojo)
-  - YOY con delta absoluto (+15% / +23 uds)
+  - YOY con delta absoluto (+15% / +23 uds) vs la misma semana ISO del año anterior.
+    Familia / subfamilia / mercado: ventas reales de esa semana (informes en data/yoy/<mercado>/AAAA_Wss.csv)
+    con el catalogo de la temporada anterior (catalog_prev_es.json). ASIN: el mismo ASIN.
   - Peso % de categoria sobre total mercado
   - Tendencia: W4 vs media W1-W3
   - Tabla 3 niveles colapsable: Familia -> Subfamilia -> ASIN
@@ -16,7 +18,7 @@ FUENTE: MerchantSpring (generateOrderedRevenueReport, Vendor manufacturing)
 CATALOGO: catalog_es.json; si no existe, lo lee desde Excel
 """
 
-import sys, csv, os, json
+import sys, csv, os, json, math
 sys.stdout.reconfigure(encoding='utf-8')
 
 # ===========================================================
@@ -39,8 +41,10 @@ MARKET_CONFIGS = [
 ]
 
 _SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-CSV_BASE     = os.path.join(_SCRIPT_DIR, 'data')
+CSV_BASE     = os.environ.get('WEEKLY_CSV_BASE', os.path.join(_SCRIPT_DIR, 'data'))
 CATALOG_JSON = os.path.join(_SCRIPT_DIR, 'data', 'catalog_es.json')
+PREV_CATALOG_JSON = os.path.join(_SCRIPT_DIR, 'data', 'catalog_prev_es.json')
+YOY_DIR      = os.path.join(_SCRIPT_DIR, 'data', 'yoy')
 HISTORY_JSON = os.path.join(_SCRIPT_DIR, 'data', 'history.json')
 EXCEL_PATH   = os.environ.get('WEEKLY_EXCEL', r'C:\Users\Daniela\Downloads\FINOCAM_Familias_Subfamilias_ASIN.xlsx')
 OUT_PATH     = os.environ.get('WEEKLY_OUT_PATH', os.path.join(os.path.dirname(_SCRIPT_DIR), 'FINOCAM_Weekly.html'))
@@ -65,27 +69,29 @@ CAT_ORDER = [
 import datetime as _dt
 _MONTHS_ES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
+def _week(mon):
+    sun = mon + _dt.timedelta(days=6)
+    if mon.month == sun.month:
+        label = f'{mon.day}–{sun.day} {_MONTHS_ES[mon.month]}'
+    else:
+        label = f'{mon.day} {_MONTHS_ES[mon.month]}–{sun.day} {_MONTHS_ES[sun.month]}'
+    iso_yr, iso_wk, _ = mon.isocalendar()
+    return {'label': label, 'iso_wk': iso_wk, 'iso_yr': iso_yr}
+
 def _auto_weeks():
     today = _dt.date.today()
     this_mon = today - _dt.timedelta(days=today.weekday())
-    out = []
-    for i in range(4, 0, -1):
-        mon = this_mon - _dt.timedelta(weeks=i)
-        sun = mon + _dt.timedelta(days=6)
-        if mon.month == sun.month:
-            label = f'{mon.day}–{sun.day} {_MONTHS_ES[mon.month]}'
-        else:
-            label = f'{mon.day} {_MONTHS_ES[mon.month]}–{sun.day} {_MONTHS_ES[sun.month]}'
-        iso_wk = mon.isocalendar()[1]
-        out.append({'label': label, 'wk': f'W{5-i}', 'iso_wk': iso_wk, 'iso_yr': mon.year})
-    return out
+    return [_week(this_mon - _dt.timedelta(weeks=i)) for i in range(4, 0, -1)]
 
-WEEKS = _auto_weeks() if os.environ.get('WEEKLY_AUTO') == '1' else [
-    {'label': '24–30 Ago', 'wk': 'W1', 'iso_wk': 35, 'iso_yr': 2026},
-    {'label': '31 Ago–6 Sep', 'wk': 'W2', 'iso_wk': 36, 'iso_yr': 2026},
-    {'label': '7–13 Sep', 'wk': 'W3', 'iso_wk': 37, 'iso_yr': 2026},
-    {'label': '15–21 Sep', 'wk': 'W4', 'iso_wk': 38, 'iso_yr': 2026},
-]
+# Por defecto, las 4 semanas ISO completas mas recientes. WEEKLY_WEEKS fija otras 4
+# (p.ej. "2026-W29,2026-W30,2026-W31,2026-W32") para reconstruir semanas del historico.
+if os.environ.get('WEEKLY_WEEKS'):
+    WEEKS = [_week(_dt.date.fromisocalendar(int(y), int(w), 1))
+             for y, w in (s.strip().split('-W') for s in os.environ['WEEKLY_WEEKS'].split(','))]
+    if len(WEEKS) != 4:
+        sys.exit('WEEKLY_WEEKS necesita exactamente 4 semanas')
+else:
+    WEEKS = _auto_weeks()
 
 UPDATE_DATE = _dt.date.today().isoformat()
 
@@ -130,6 +136,15 @@ else:
                 catalog[asin]['col'] = col
     print(f'Catalogo: {len(catalog)} ASINs (Excel)')
 
+# Catalogo de la temporada anterior: con el se calcula el YOY de familias, subfamilias y mercado
+prev_catalog = {}
+if os.path.exists(PREV_CATALOG_JSON):
+    with open(PREV_CATALOG_JSON, encoding='utf-8') as f:
+        prev_catalog = json.load(f)
+    print(f'Catalogo temporada anterior: {len(prev_catalog)} ASINs (catalog_prev_es.json)')
+else:
+    print('AVISO: falta catalog_prev_es.json (tools/catalog_from_master.py) — YOY solo por ASIN')
+
 # ===========================================================
 #  2. CARGA DE CSVs POR MERCADO
 # ===========================================================
@@ -160,6 +175,38 @@ def load_market_csvs(market_dir):
                 titles[asin] = row.get('title', '')
     return aw, titles
 
+def prior_week(wk):
+    """Semana equivalente del año anterior (lunes - 52 semanas) -> (año ISO, semana ISO)."""
+    mon = _dt.date.fromisocalendar(wk['iso_yr'], wk['iso_wk'], 1) - _dt.timedelta(weeks=52)
+    return tuple(mon.isocalendar()[:2])
+
+def load_prior_weeks(code):
+    """Ventas del año anterior por ASIN para cada semana: {asin: (u, rev)}, o None si falta el CSV.
+    Son informes de MerchantSpring con esa semana del año anterior como periodo actual: las columnas
+    prior* de los CSV semanales solo traen los ASIN que tienen fila este año y se quedan cortas."""
+    if not prev_catalog:
+        return [None] * 4
+    out = []
+    for wk in WEEKS:
+        yr, iso = prior_week(wk)
+        path = os.path.join(YOY_DIR, code.lower(), f'{yr}_W{iso:02d}.csv')
+        if not os.path.exists(path):
+            print(f'    AVISO {code}: sin YOY de la Sem {wk["iso_wk"]} (falta {path})')
+            out.append(None)
+            continue
+        d = {}
+        with open(path, encoding='utf-8-sig') as f:
+            for row in csv.DictReader(f):
+                try:
+                    u   = int(row['orderedUnits'])
+                    rev = float(row['orderedRevenue'])
+                except (ValueError, KeyError):
+                    continue
+                if u > 0 or rev > 0:
+                    d[row['asin']] = (u, rev)
+        out.append(d)
+    return out
+
 # ===========================================================
 #  3. AGREGACION
 # ===========================================================
@@ -188,6 +235,15 @@ def agg(asins, aw):
             t = (W[3]['u'] - avg) / avg * 100
     return {'W': W, 'mu': mu, 'mr': mr, 'tend': t, 'total_u': total_u, 'total_r': total_r}
 
+def set_prior(a, asins, pw):
+    """Sustituye pu/pr de cada semana por las ventas del año anterior de 'asins' (si hay CSV de esa semana)."""
+    for wi in range(4):
+        if pw[wi] is None:
+            continue
+        rows = [pw[wi][x] for x in asins if x in pw[wi]]
+        a['W'][wi]['pu'] = sum(u for u, _ in rows)
+        a['W'][wi]['pr'] = sum(r for _, r in rows)
+
 # ===========================================================
 #  4. ESTRUCTURA POR MERCADO
 # ===========================================================
@@ -209,8 +265,9 @@ def build_struct(catalog):
     return struct
 
 full_struct = build_struct(catalog)
+prev_struct = build_struct(prev_catalog)
 
-def build_dash(aw, currency):
+def build_dash(aw, currency, pw):
     dash = {}
     for cat in CAT_ORDER:
         if cat not in full_struct:
@@ -220,11 +277,14 @@ def build_dash(aw, currency):
         if not any(a in aw for a in all_a):
             continue
         ca = agg(all_a, aw)
+        prev_subs = prev_struct.get(cat, {})
+        set_prior(ca, [a for subs in prev_subs.values() for a in subs], pw)
         subs_d = {}
         for sub, asins in sorted(full_struct[cat].items()):
             if not any(a in aw for a in asins):
                 continue
             sa = agg(asins, aw)
+            set_prior(sa, prev_subs.get(sub, []), pw)
             ad = {}
             for a in sorted(asins, key=lambda x: -(aw.get(x, {}).get(3, {'u': 0})['u'])):
                 if a not in aw:
@@ -233,9 +293,11 @@ def build_dash(aw, currency):
                 total_u_a = sum((aw[a].get(wi) or {}).get('u', 0) for wi in range(4))
                 total_r_a = sum((aw[a].get(wi) or {}).get('rev', 0.0) for wi in range(4))
                 avg_price = total_r_a / total_u_a if total_u_a > 0 else 0
+                a_agg = agg([a], aw)
+                set_prior(a_agg, [a], pw)
                 ad[a] = {
                     'desc':      (catalog[a]['desc'] or '')[:48],
-                    'agg':       agg([a], aw),
+                    'agg':       a_agg,
                     'avg_price': avg_price,
                 }
             if ad:
@@ -254,9 +316,13 @@ for mc in MARKET_CONFIGS:
     if n_active == 0:
         all_market_data[code] = None
         continue
-    dash = build_dash(aw, mc['currency'])
+    pw = load_prior_weeks(code)
+    dash = build_dash(aw, mc['currency'], pw)
     week_totals_u = [sum(dash[cat]['agg']['W'][wi]['u'] for cat in dash) for wi in range(4)]
     week_totals_r = [sum(dash[cat]['agg']['W'][wi]['rev'] for cat in dash) for wi in range(4)]
+    # Total mercado del año anterior: todos los ASIN del catalogo de la temporada anterior
+    week_prior_u = [None if p is None else sum(u for a, (u, _) in p.items() if a in prev_catalog) for p in pw]
+    week_prior_r = [None if p is None else sum(r for a, (_, r) in p.items() if a in prev_catalog) for p in pw]
     cat_chart = []
     for cat in CAT_ORDER:
         if cat not in dash:
@@ -271,6 +337,7 @@ for mc in MARKET_CONFIGS:
     all_market_data[code] = {
         'aw': aw, 'titles': titles, 'dash': dash,
         'week_totals_u': week_totals_u, 'week_totals_r': week_totals_r,
+        'pw': pw, 'week_prior_u': week_prior_u, 'week_prior_r': week_prior_r,
         'total_u': total_u, 'total_r': total_r,
         'cat_chart': cat_chart,
         'currency': mc['currency'],
@@ -293,25 +360,34 @@ if os.path.exists(HISTORY_JSON):
 # Guardar datos de cada semana del run actual
 for wi, wk in enumerate(WEEKS):
     key = f'{wk["iso_yr"]}_W{wk["iso_wk"]:02d}'
-    entry = {'label': wk['label'], 'iso': wk['iso_wk'], 'yr': wk['iso_yr'], 'markets': {}}
+    pyr, piso = prior_week(wk)
+    entry = {'label': wk['label'], 'iso': wk['iso_wk'], 'yr': wk['iso_yr'], 'pyr': pyr, 'piso': piso, 'markets': {}}
     for mc in MARKET_CONFIGS:
         md = all_market_data.get(mc['code'])
         if md is None:
             entry['markets'][mc['code']] = None
             continue
+        pw = md['pw'][wi]
         cats = {}
         for cat in CAT_ORDER:
-            if cat not in md['dash']:
+            if cat in md['dash']:
+                w = md['dash'][cat]['agg']['W'][wi]
+                c = {'u': w['u'], 'r': round(w['rev'], 1)}
+                if pw is not None:
+                    c.update(pu=w['pu'], pr=round(w['pr'], 1))
+            elif pw is not None:
+                # categoria sin ventas este año pero con ventas el anterior
+                rows = [pw[a] for subs in prev_struct.get(cat, {}).values() for a in subs if a in pw]
+                if not rows:
+                    continue
+                c = {'u': 0, 'r': 0, 'pu': sum(u for u, _ in rows), 'pr': round(sum(r for _, r in rows), 1)}
+            else:
                 continue
-            d = md['dash'][cat]['agg']
-            cats[md['dash'][cat].get('display', cat)] = {
-                'u': d['W'][wi]['u'], 'r': round(d['W'][wi]['rev'], 1)
-            }
-        entry['markets'][mc['code']] = {
-            'u': md['week_totals_u'][wi],
-            'r': round(md['week_totals_r'][wi], 1),
-            'cats': cats,
-        }
+            cats['Resto' if cat == '_RESTO_' else cat] = c
+        m = {'u': md['week_totals_u'][wi], 'r': round(md['week_totals_r'][wi], 1), 'cats': cats}
+        if pw is not None:
+            m.update(pu=md['week_prior_u'][wi], pr=round(md['week_prior_r'][wi], 1))
+        entry['markets'][mc['code']] = m
     history[key] = entry
 
 # Ordenar por clave (cronologico)
@@ -344,19 +420,23 @@ def tend_html(t):
     if t > 0:       return f'<span class="t-up">↑{t:.0f}%</span>'
     return f'<span class="t-dn">↓{abs(t):.0f}%</span>'
 
-def yoy_span(cur, prev, cur_label, prev_label, cls_prefix):
-    if not cur or cur < 1: return ''
-    if not prev or prev < 1:
-        return (f'<span class="{cls_prefix} yb-new" title="Sin datos año anterior">'
+def _r0(x):
+    """Redondeo a entero, mitades hacia fuera (igual que r0() del JS de semanas archivadas)."""
+    return int(math.copysign(math.floor(abs(x) + 0.5), x))
+
+def yoy_span(cur, prev, cur_label, prev_label, cls_prefix, fmt_delta=None):
+    cur = cur or 0
+    if prev is None or (cur < 1 and prev < 1): return ''
+    if prev < 1:
+        return (f'<span class="{cls_prefix} yb-new" title="Sin ventas el año anterior">'
                 f'<small class="yoy-lbl">YOY</small>&nbsp;N/A</span>')
-    pct = (cur - prev) / prev * 100
-    if abs(pct) > 999: return ''
-    delta = int(round(cur - prev))
-    sign = '+' if pct >= 0 else ''
-    dsign = '+' if delta >= 0 else ''
+    pct = max((cur - prev) / prev * 100, -100)
+    delta = cur - prev
+    pct_txt = '&gt;+999%' if pct > 999 else f'{"+" if pct >= 0 else ""}{_r0(pct)}%'
+    d_txt = fmt_delta(delta) if fmt_delta else f'{_r0(delta):,}'
     cls = 'yb-up' if pct >= 0 else 'yb-dn'
-    return (f'<span class="{cls_prefix} {cls}" title="vs {prev_label} año anterior">'
-            f'<small class="yoy-lbl">YOY</small>&nbsp;{sign}{pct:.0f}%&nbsp;<small>({dsign}{delta})</small></span>')
+    return (f'<span class="{cls_prefix} {cls}" title="Año anterior: {_r0(prev):,} {prev_label}">'
+            f'<small class="yoy-lbl">YOY</small>&nbsp;{pct_txt}&nbsp;<small>({"+" if delta >= 0 else ""}{d_txt})</small></span>')
 
 def weight_badge(cat_u, total_u):
     if not total_u: return ''
@@ -450,8 +530,17 @@ def market_section(code, md, WEEKS):
         'weekIso': [w['iso_wk'] for w in WEEKS],
         'weekTotalsU': wtU,
         'weekTotalsR': [round(v) for v in wtR],
+        'weekPriorU': md['week_prior_u'],
         'cats': md['cat_chart'],
     })
+
+    # YOY de las 4 semanas (solo si hay datos del año anterior de todas)
+    kpi_yoy_u = kpi_yoy_r = ''
+    if all(v is not None for v in md['week_prior_u']):
+        vs = f'<span>vs mismas semanas {WEEKS[0]["iso_yr"] - 1}</span>'
+        kpi_yoy_u = f'<div class="kpi-yoy">{yoy_span(total_u, sum(md["week_prior_u"]), "uds", "uds", "yy-k")}{vs}</div>'
+        fmt_r = lambda v: ('-' if v < 0 else '') + fr_val(abs(v), currency)
+        kpi_yoy_r = f'<div class="kpi-yoy">{yoy_span(total_r, sum(md["week_prior_r"]), currency, currency, "yy-k", fmt_r)}{vs}</div>'
 
     wk_ths = ''.join(
         f'<th class="wkh"><div class="wkl">Sem&nbsp;{w["iso_wk"]}</div><div class="wkd">{w["label"]}</div><div class="wkyoy">vs&nbsp;{w["iso_yr"]-1}</div></th>'
@@ -471,11 +560,13 @@ def market_section(code, md, WEEKS):
         <div class="kpi-val">{round(total_u):,}</div>
         <div class="kpi-lbl">Uds vendidas · 4 semanas</div>
         <div class="kpi-sub">Mejor: {best_wk_lbl} ({best_wk_u:,} uds)</div>
+        {kpi_yoy_u}
       </div>
       <div class="kpi">
         <div class="kpi-val">{total_r_fmt}</div>
         <div class="kpi-lbl">Facturación · 4 semanas</div>
         <div class="kpi-sub">Media/día: {avg_day_r}</div>
+        {kpi_yoy_r}
       </div>
       <div class="kpi kpi-g">
         <div class="kpi-val">{md["n_active"]:,}</div>
@@ -555,18 +646,25 @@ def market_section(code, md, WEEKS):
 
 hist_data = []
 for key, entry in history.items():
-    row = {'key': key, 'label': entry.get('label', key), 'iso': entry.get('iso', 0), 'yr': entry.get('yr', 2026), 'markets': {}}
+    row = {'key': key, 'label': entry.get('label', key), 'iso': entry.get('iso', 0), 'yr': entry.get('yr', 2026),
+           'piso': entry.get('piso'), 'pyr': entry.get('pyr'), 'markets': {}}
     for mc in MARKET_CONFIGS:
         code = mc['code']
         mkt = (entry.get('markets') or {}).get(code)
         if mkt:
             row['markets'][code] = {'u': mkt.get('u', 0), 'r': round(mkt.get('r', 0), 1), 'cats': mkt.get('cats', {})}
+            if mkt.get('pu') is not None:
+                row['markets'][code].update(pu=mkt['pu'], pr=round(mkt.get('pr', 0), 1))
         else:
             row['markets'][code] = None
     hist_data.append(row)
 
 HIST_JS = json.dumps(hist_data)
-MKT_JS  = json.dumps([{'code': mc['code'], 'flag': mc['flag'], 'label': mc['label']} for mc in MARKET_CONFIGS])
+MKT_JS  = json.dumps([{'code': mc['code'], 'flag': mc['flag'], 'label': mc['label'], 'cur': mc['currency']} for mc in MARKET_CONFIGS])
+_PREV_YR = WEEKS[-1]['iso_yr'] - 1
+YOY_NOTE = (f'YOY = misma semana ISO del año anterior · familias, subfamilias y mercado con el catálogo de la '
+            f'temporada anterior (anualidades {_PREV_YR}–{_PREV_YR + 1} y NOCAD) · ASIN = mismo ASIN · '
+            f'(Δ) = diferencia absoluta')
 
 # Week picker chips (generated in Python from history data)
 wk_chips_html = ''
@@ -725,6 +823,9 @@ tr.rc .wr{{font-size:10px}}
 .yb-up{{background:rgba(34,197,94,.18);color:var(--yb-up-c)}}
 .yb-dn{{background:rgba(239,68,68,.16);color:var(--yb-dn-c)}}
 .yb-new{{background:rgba(148,163,184,.15);color:var(--t3)}}
+.yy-k{{font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap}}
+.yy-k small{{font-size:9px;font-weight:400}}
+.kpi-yoy{{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:6px;font-size:9px;color:var(--t3)}}
 td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
 .t-up{{font-size:12px;font-weight:700;color:var(--g)}}
 .t-dn{{font-size:12px;font-weight:700;color:var(--r)}}
@@ -754,6 +855,10 @@ td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
 .sc-name{{font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px}}
 .sc-u{{font-size:14px;font-weight:700;color:var(--t1);font-variant-numeric:tabular-nums;display:block}}
 .sc-r{{font-size:10px;color:var(--t2);display:block}}
+.snap-vs{{font-size:9px;color:var(--t3);font-weight:400}}
+.snap-tot{{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--t2);margin-bottom:8px}}
+.sc-y{{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}}
+.sc-y .yy-k{{font-size:9px;padding:1px 5px}}
 </style>
 </head>
 <body>
@@ -793,7 +898,7 @@ td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
 <div class="ft">
   <span>Fuente: MerchantSpring · Vendor manufacturing view</span>
   <span>·</span><span>Semáforo vs media/día del periodo</span>
-  <span>·</span><span>YOY = misma semana año anterior · (Δ) = diferencia absoluta en unidades</span>
+  <span>·</span><span>{YOY_NOTE}</span>
   <span>·</span><span>% = peso de categoría sobre total mercado</span>
 </div>
 
@@ -875,6 +980,26 @@ function togU(code){{var f=window._mktTogU&&window._mktTogU[code];if(f)f();}}
 // Graficos de mercado
 function getCSS(v){{return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||v;}}
 
+// YOY: misma regla que yoy_span() en Python
+function r0(x){{return (x<0?-1:1)*Math.floor(Math.abs(x)+0.5);}}
+function yoyPct(cur,prev){{
+  cur=cur||0;
+  if(prev==null||(cur<1&&prev<1))return null;
+  if(prev<1)return {{txt:'N/A',cls:'yb-new'}};
+  var p=Math.max((cur-prev)/prev*100,-100);
+  return {{txt:p>999?'>+999%':(p>=0?'+':'')+r0(p)+'%',cls:p>=0?'yb-up':'yb-dn'}};
+}}
+function fmtU(v){{return r0(v||0).toLocaleString('en-US');}}
+function fmtR(v,cur){{v=v||0;return (v>=1000?(v/1000).toFixed(1)+'k':Math.round(v))+cur;}}
+function yoyBadge(cur,prev,cls,fmt,unit){{
+  var y=yoyPct(cur,prev);
+  if(!y)return '';
+  if(y.cls==='yb-new')return '<span class="'+cls+' yb-new" title="Sin ventas el año anterior"><small class="yoy-lbl">YOY</small>&nbsp;N/A</span>';
+  var d=(cur||0)-prev;
+  return '<span class="'+cls+' '+y.cls+'" title="Año anterior: '+fmt(prev)+unit+'"><small class="yoy-lbl">YOY</small>&nbsp;'
+        +y.txt.replace('>','&gt;')+'&nbsp;<small>('+(d>=0?'+':'-')+fmt(Math.abs(d))+')</small></span>';
+}}
+
 function drawWeekChart(canvas, data){{
   if(!canvas||!canvas.offsetWidth)return;
   var dpr=window.devicePixelRatio||1;
@@ -882,8 +1007,10 @@ function drawWeekChart(canvas, data){{
   canvas.width=W*dpr;canvas.height=H*dpr;
   var ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
   var vals=data.weekTotalsU,n=vals.length;
-  var maxV=Math.max.apply(null,vals)*1.15||1;
-  var pad={{l:36,r:10,t:8,b:28}};
+  var pri=data.weekPriorU||[];
+  var hasPri=pri.some(function(p){{return p!=null;}});
+  var maxV=Math.max.apply(null,vals.concat(pri.filter(function(p){{return p!=null;}})))*1.15||1;
+  var pad={{l:36,r:10,t:hasPri?18:8,b:hasPri?38:28}};
   var bw=Math.floor((W-pad.l-pad.r)/n*0.55);
   var gap=(W-pad.l-pad.r-bw*n)/(n+1);
   var t3=getCSS('--t3'),bd=getCSS('--bd'),acc=getCSS('--acc'),t2=getCSS('--t2');
@@ -905,7 +1032,27 @@ function drawWeekChart(canvas, data){{
     ctx.fillStyle=t3;ctx.font='9px sans-serif';
     var wkLbl=data.weekIso?'S'+data.weekIso[i]:data.weekNames[i].split('–')[0].trim();
     ctx.fillText(wkLbl,x+bw/2,H-pad.b+11);
+    // año anterior: marca discontinua a su altura + % YOY bajo la semana
+    var p=pri[i];
+    if(p!=null&&p>0){{
+      var py=H-pad.b-(p/maxV)*(H-pad.t-pad.b);
+      ctx.strokeStyle=t2;ctx.lineWidth=1.5;ctx.setLineDash([3,2]);
+      ctx.beginPath();ctx.moveTo(x-4,py);ctx.lineTo(x+bw+4,py);ctx.stroke();ctx.setLineDash([]);
+    }}
+    var yy=yoyPct(v,p);
+    if(yy){{
+      ctx.fillStyle=yy.cls==='yb-up'?getCSS('--yb-up-c'):(yy.cls==='yb-dn'?getCSS('--yb-dn-c'):t3);
+      ctx.font='bold 9px sans-serif';
+      ctx.fillText((W/n>=80?'YOY ':'')+yy.txt,x+bw/2,H-pad.b+23);
+    }}
   }});
+  if(hasPri){{
+    ctx.font='9px sans-serif';
+    var lt='Año anterior',lx=W-pad.r-ctx.measureText(lt).width-20;
+    ctx.strokeStyle=t2;ctx.lineWidth=1.5;ctx.setLineDash([3,2]);
+    ctx.beginPath();ctx.moveTo(lx,7);ctx.lineTo(lx+14,7);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=t3;ctx.textAlign='left';ctx.fillText(lt,lx+18,10);
+  }}
 }}
 
 function drawCatChart(canvas, data){{
@@ -989,6 +1136,7 @@ function drawAllCharts(code){{
 // Grafico historico
 var _histColors=['#ff9900','#22c55e','#60a5fa','#f472b6','#a78bfa','#34d399','#fb923c','#f59e0b','#e879f9'];
 function getMktU(d,code){{var m=d.markets[code];return m?m.u:0;}}
+function getMktPU(d,code){{var m=d.markets[code];return m&&m.pu!=null?m.pu:null;}}
 
 function buildHistBtns(){{
   var div=document.getElementById('hist-mkt-btns');
@@ -1023,8 +1171,13 @@ function drawHistChart(){{
   var n=HIST_DATA.length;
   if(n===0)return;
   var allVals=[];
-  HIST_DATA.forEach(function(d){{_histMkts.forEach(function(c){{allVals.push(getMktU(d,c));}});}});
+  HIST_DATA.forEach(function(d){{
+    _histMkts.forEach(function(c){{allVals.push(getMktU(d,c));}});
+    var p=getMktPU(d,_activeMkt);if(p!=null)allVals.push(p);
+  }});
   var maxV=Math.max.apply(null,allVals)*1.15||10;
+  var hasPri=HIST_DATA.some(function(d){{return getMktPU(d,_activeMkt)!=null;}});
+  var priColor=_histColors[MKT_LIST.findIndex(function(m){{return m.code===_activeMkt;}})]||'#888';
   var cw=(W-pad.l-pad.r)/(n>1?n-1:1);
   // grid
   ctx.strokeStyle=bd;ctx.lineWidth=.5;
@@ -1033,6 +1186,19 @@ function drawHistChart(){{
     ctx.beginPath();ctx.moveTo(pad.l,gy);ctx.lineTo(W-pad.r,gy);ctx.stroke();
     ctx.fillStyle=t3;ctx.font='9px sans-serif';ctx.textAlign='right';
     ctx.fillText(Math.round(maxV/4*(4-gi)),pad.l-4,gy+3);
+  }}
+  // año anterior del mercado activo (discontinua)
+  if(hasPri){{
+    ctx.strokeStyle=priColor;ctx.lineWidth=1.5;ctx.globalAlpha=.5;ctx.setLineDash([5,4]);
+    ctx.beginPath();
+    var pen=false;
+    HIST_DATA.forEach(function(d,i){{
+      var v=getMktPU(d,_activeMkt);
+      if(v==null){{pen=false;return;}}
+      var x=pad.l+i*cw,y=H-pad.b-(v/maxV)*(H-pad.t-pad.b);
+      if(!pen){{ctx.moveTo(x,y);pen=true;}}else ctx.lineTo(x,y);
+    }});
+    ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
   }}
   // lines per market
   _histMkts.forEach(function(code){{
@@ -1076,6 +1242,12 @@ function drawHistChart(){{
     ctx.fillText((mkt?mkt.flag+' ':'')+code,lx+20,pad.t+6);
     lx+=72;
   }});
+  if(hasPri){{
+    ctx.strokeStyle=priColor;ctx.lineWidth=1.5;ctx.globalAlpha=.6;ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(lx,pad.t+.5);ctx.lineTo(lx+16,pad.t+.5);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+    ctx.fillStyle=t2;ctx.font='9px sans-serif';ctx.textAlign='left';
+    ctx.fillText(_activeMkt+' año anterior',lx+20,pad.t+6);
+  }}
 }}
 
 // Week snapshot para semanas archivadas
@@ -1094,23 +1266,30 @@ function showWkSnap(btn,key){{
   var d=HIST_DATA.find(function(x){{return x.key===key;}});
   if(!d)return;
   var mkt=d.markets[_activeMkt];
+  var mi=MKT_LIST.find(function(m){{return m.code===_activeMkt;}})||{{}};
+  var fR=function(v){{return fmtR(v,mi.cur||'€');}};
+  var hasPri=!!mkt&&mkt.pu!=null;
   var html='<div class="snap-hdr"><strong>Sem '+d.iso+' \xb7 '+d.label+'</strong>'
           +'<span class="snap-mkt">'+_activeMkt+'</span>'
+          +(hasPri?'<span class="snap-vs">YOY vs Sem '+(d.piso||d.iso)+' '+(d.pyr||d.yr-1)+'</span>':'')
           +'<button class="snap-close" onclick="closeWkSnap()">×</button></div>';
   if(!mkt){{
     html+='<div class="snap-empty">Sin datos para '+_activeMkt+' en esta semana</div>';
   }}else{{
-    html+='<div style="font-size:11px;color:var(--t2);margin-bottom:8px"><strong style="color:var(--acc2)">'+mkt.u+'</strong> uds';
-    if(mkt.r)html+=' · <strong>'+mkt.r+'</strong>';
-    html+='</div>';
+    html+='<div class="snap-tot"><span><strong style="color:var(--acc2)">'+fmtU(mkt.u)+'</strong> uds</span>'
+         +yoyBadge(mkt.u,mkt.pu,'yy-k',fmtU,' uds')
+         +'<span>· <strong>'+fR(mkt.r)+'</strong></span>'
+         +yoyBadge(mkt.r,mkt.pr,'yy-k',fR,'')+'</div>';
+    if(!hasPri)html+='<div class="snap-empty">Sin datos del año anterior para esta semana</div>';
     if(mkt.cats&&Object.keys(mkt.cats).length){{
       html+='<div class="snap-cats">';
       Object.keys(mkt.cats).forEach(function(cat){{
         var v=mkt.cats[cat];
         html+='<div class="snap-cat"><span class="sc-name">'+cat+'</span>'
-             +'<span class="sc-u">'+v.u+' uds</span>';
-        if(v.r)html+='<span class="sc-r">'+v.r+'</span>';
-        html+='</div>';
+             +'<span class="sc-u">'+fmtU(v.u)+' uds</span>'
+             +'<span class="sc-r">'+fR(v.r)+'</span>'
+             +'<div class="sc-y">'+yoyBadge(v.u,v.pu,'yy-k',fmtU,' uds')+yoyBadge(v.r,v.pr,'yy-k',fR,'')+'</div>'
+             +'</div>';
       }});
       html+='</div>';
     }}
