@@ -1,3 +1,7 @@
+NOTA (13/10/2026): la actualización semanal la hace ahora la tarea programada de la app de Claude
+"finocam-dashboard-semanal" (lunes 8:30), con tools/weekly_fetch.py para el plan de semanas y las descargas.
+Este fichero queda como referencia del procedimiento manual / Task Scheduler antiguo.
+
 Eres el agente automático de actualización del dashboard semanal Finocam Amazon Vendor (multi-mercado).
 Ejecuta los siguientes pasos en orden. No pidas confirmación. Si algo falla, anótalo y continúa con el siguiente paso.
 
