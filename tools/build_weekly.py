@@ -28,19 +28,24 @@ sys.stdout.reconfigure(encoding='utf-8')
 CLIENT_NAME   = "Finocam"
 CLIENT_LETTER = "F"
 
+# Toda la facturación se muestra en €: 'fx' = moneda de MerchantSpring que se convierte con el tipo del BCE
 MARKET_CONFIGS = [
-    {'code': 'ES', 'flag': '🇪🇸', 'label': 'España',        'dir': '',   'currency': '€',  'tz': 'Europe/Madrid'},
-    {'code': 'FR', 'flag': '🇫🇷', 'label': 'France',         'dir': 'fr', 'currency': '€',  'tz': 'Europe/Paris'},
-    {'code': 'IT', 'flag': '🇮🇹', 'label': 'Italia',         'dir': 'it', 'currency': '€',  'tz': 'Europe/Rome'},
-    {'code': 'DE', 'flag': '🇩🇪', 'label': 'Deutschland',    'dir': 'de', 'currency': '€',  'tz': 'Europe/Berlin'},
-    {'code': 'NL', 'flag': '🇳🇱', 'label': 'Nederland',      'dir': 'nl', 'currency': '€',  'tz': 'Europe/Amsterdam'},
-    {'code': 'BE', 'flag': '🇧🇪', 'label': 'Belgique',       'dir': 'be', 'currency': '€',  'tz': 'Europe/Brussels'},
-    {'code': 'PL', 'flag': '🇵🇱', 'label': 'Polska',         'dir': 'pl', 'currency': 'zł', 'tz': 'Europe/Warsaw'},
-    {'code': 'UK', 'flag': '🇬🇧', 'label': 'United Kingdom', 'dir': 'uk', 'currency': '£',  'tz': 'Europe/London'},
-    {'code': 'SE', 'flag': '🇸🇪', 'label': 'Sverige',        'dir': 'se', 'currency': 'kr', 'tz': 'Europe/Stockholm'},
+    {'code': 'ES', 'flag': '🇪🇸', 'label': 'España',        'dir': '',   'currency': '€', 'fx': None,  'tz': 'Europe/Madrid'},
+    {'code': 'FR', 'flag': '🇫🇷', 'label': 'France',         'dir': 'fr', 'currency': '€', 'fx': None,  'tz': 'Europe/Paris'},
+    {'code': 'IT', 'flag': '🇮🇹', 'label': 'Italia',         'dir': 'it', 'currency': '€', 'fx': None,  'tz': 'Europe/Rome'},
+    {'code': 'DE', 'flag': '🇩🇪', 'label': 'Deutschland',    'dir': 'de', 'currency': '€', 'fx': None,  'tz': 'Europe/Berlin'},
+    {'code': 'NL', 'flag': '🇳🇱', 'label': 'Nederland',      'dir': 'nl', 'currency': '€', 'fx': None,  'tz': 'Europe/Amsterdam'},
+    {'code': 'BE', 'flag': '🇧🇪', 'label': 'Belgique',       'dir': 'be', 'currency': '€', 'fx': None,  'tz': 'Europe/Brussels'},
+    {'code': 'PL', 'flag': '🇵🇱', 'label': 'Polska',         'dir': 'pl', 'currency': '€', 'fx': 'PLN', 'tz': 'Europe/Warsaw'},
+    {'code': 'UK', 'flag': '🇬🇧', 'label': 'United Kingdom', 'dir': 'uk', 'currency': '€', 'fx': 'GBP', 'tz': 'Europe/London'},
+    {'code': 'SE', 'flag': '🇸🇪', 'label': 'Sverige',        'dir': 'se', 'currency': '€', 'fx': 'SEK', 'tz': 'Europe/Stockholm'},
 ]
 
 _SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _SCRIPT_DIR)
+from fx_rates import FX
+fx = FX()
+DAILY_JSON   = os.path.join(_SCRIPT_DIR, 'data', 'daily_sales.json')
 CSV_BASE     = os.environ.get('WEEKLY_CSV_BASE', os.path.join(_SCRIPT_DIR, 'data'))
 CATALOG_JSON = os.path.join(_SCRIPT_DIR, 'data', 'catalog_es.json')
 PREV_CATALOG_JSON = os.path.join(_SCRIPT_DIR, 'data', 'catalog_prev_es.json')
@@ -149,8 +154,15 @@ else:
 #  2. CARGA DE CSVs POR MERCADO
 # ===========================================================
 
-def load_market_csvs(market_dir):
-    """Carga los 4 CSVs semanales de un mercado. Devuelve aw, titles."""
+def week_eur(cur, yr, iso):
+    """Factor para pasar a € los importes de la semana ISO (yr, iso): 1 / media de los tipos diarios del BCE."""
+    if not cur:
+        return 1.0
+    mon = _dt.date.fromisocalendar(yr, iso, 1)
+    return 1.0 / fx.avg_rate(cur, mon, mon + _dt.timedelta(days=6))
+
+def load_market_csvs(market_dir, cur=None):
+    """Carga los 4 CSVs semanales de un mercado (importes en €). Devuelve aw, titles."""
     aw = {}
     titles = {}
     dir_path = os.path.join(CSV_BASE, market_dir) if market_dir else CSV_BASE
@@ -158,17 +170,19 @@ def load_market_csvs(market_dir):
         csv_path = os.path.join(dir_path, f'weekly_{wi}.csv')
         if not os.path.exists(csv_path):
             continue
+        k = week_eur(cur, WEEKS[wi]['iso_yr'], WEEKS[wi]['iso_wk'])
+        kp = week_eur(cur, *prior_week(WEEKS[wi]))
         with open(csv_path, encoding='utf-8-sig') as f:
             for row in csv.DictReader(f):
                 asin = row['asin']
                 if asin not in catalog:
                     continue
                 try:
-                    rev = float(row['orderedRevenue'])
+                    rev = float(row['orderedRevenue']) * k
                     u   = int(row['orderedUnits'])
-                    pr  = float(row['priorOrderedRevenue'])
+                    pr  = float(row['priorOrderedRevenue']) * kp
                     pu  = int(row['priorOrderedUnits'])
-                    avg_p = float(row.get('avgPrice') or 0)
+                    avg_p = float(row.get('avgPrice') or 0) * k
                 except (ValueError, KeyError):
                     continue
                 aw.setdefault(asin, {})[wi] = {'rev': rev, 'u': u, 'pr': pr, 'pu': pu, 'avg': avg_p}
@@ -180,7 +194,7 @@ def prior_week(wk):
     mon = _dt.date.fromisocalendar(wk['iso_yr'], wk['iso_wk'], 1) - _dt.timedelta(weeks=52)
     return tuple(mon.isocalendar()[:2])
 
-def load_prior_weeks(code):
+def load_prior_weeks(code, cur=None):
     """Ventas del año anterior por ASIN para cada semana: {asin: (u, rev)}, o None si falta el CSV.
     Son informes de MerchantSpring con esa semana del año anterior como periodo actual: las columnas
     prior* de los CSV semanales solo traen los ASIN que tienen fila este año y se quedan cortas."""
@@ -195,11 +209,12 @@ def load_prior_weeks(code):
             out.append(None)
             continue
         d = {}
+        k = week_eur(cur, yr, iso)
         with open(path, encoding='utf-8-sig') as f:
             for row in csv.DictReader(f):
                 try:
                     u   = int(row['orderedUnits'])
-                    rev = float(row['orderedRevenue'])
+                    rev = float(row['orderedRevenue']) * k
                 except (ValueError, KeyError):
                     continue
                 if u > 0 or rev > 0:
@@ -310,13 +325,13 @@ def build_dash(aw, currency, pw):
 all_market_data = {}
 for mc in MARKET_CONFIGS:
     code = mc['code']
-    aw, titles = load_market_csvs(mc['dir'])
+    aw, titles = load_market_csvs(mc['dir'], mc['fx'])
     n_active = sum(1 for a in aw if any(aw[a].get(wi, {}).get('u', 0) > 0 for wi in range(4)))
     print(f'  {mc["flag"]} {code}: {n_active} ASINs con ventas')
     if n_active == 0:
         all_market_data[code] = None
         continue
-    pw = load_prior_weeks(code)
+    pw = load_prior_weeks(code, mc['fx'])
     dash = build_dash(aw, mc['currency'], pw)
     week_totals_u = [sum(dash[cat]['agg']['W'][wi]['u'] for cat in dash) for wi in range(4)]
     week_totals_r = [sum(dash[cat]['agg']['W'][wi]['rev'] for cat in dash) for wi in range(4)]
@@ -357,11 +372,34 @@ if os.path.exists(HISTORY_JSON):
     except Exception:
         history = {}
 
+def history_to_eur(entry):
+    """Semanas guardadas antes del cambio a €: pasa a € la facturación de PL, UK y SE con el tipo de esa semana
+    (y la del año anterior con el tipo de la semana del año anterior). Las marca con 'eur' para no repetirlo."""
+    if entry.get('eur'):
+        return
+    pyr, piso = entry.get('pyr'), entry.get('piso')
+    if not pyr:
+        pyr, piso = prior_week({'iso_yr': entry['yr'], 'iso_wk': entry['iso']})
+    for mc in MARKET_CONFIGS:
+        m = (entry.get('markets') or {}).get(mc['code'])
+        if not mc['fx'] or not m:
+            continue
+        k, kp = week_eur(mc['fx'], entry['yr'], entry['iso']), week_eur(mc['fx'], pyr, piso)
+        for obj in [m] + list((m.get('cats') or {}).values()):
+            obj['r'] = round(obj.get('r', 0) * k, 1)
+            if obj.get('pr') is not None:
+                obj['pr'] = round(obj['pr'] * kp, 1)
+    entry['eur'] = True
+
+for _entry in history.values():
+    history_to_eur(_entry)
+
 # Guardar datos de cada semana del run actual
 for wi, wk in enumerate(WEEKS):
     key = f'{wk["iso_yr"]}_W{wk["iso_wk"]:02d}'
     pyr, piso = prior_week(wk)
-    entry = {'label': wk['label'], 'iso': wk['iso_wk'], 'yr': wk['iso_yr'], 'pyr': pyr, 'piso': piso, 'markets': {}}
+    entry = {'label': wk['label'], 'iso': wk['iso_wk'], 'yr': wk['iso_yr'], 'pyr': pyr, 'piso': piso, 'eur': True,
+             'markets': {}}
     for mc in MARKET_CONFIGS:
         md = all_market_data.get(mc['code'])
         if md is None:
@@ -396,6 +434,76 @@ history = dict(sorted(history.items()))
 with open(HISTORY_JSON, 'w', encoding='utf-8') as f:
     json.dump(history, f, ensure_ascii=False)
 print(f'Historico: {len(history)} semanas guardadas')
+
+# ===========================================================
+#  5b. MENSUAL (acumulado del mes y historico mes a mes)
+# ===========================================================
+# Ventas diarias de MerchantSpring (tools/daily_sales.py): todos los ASIN de Finocam del mercado, IT sin APS.
+# Cada dia se pasa a € con su tipo del BCE. Año anterior = mismos dias naturales del año anterior.
+
+import calendar as _cal
+_MONTHS_LONG = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre',
+                'octubre', 'noviembre', 'diciembre']
+MONTH_FROM = _dt.date(2025, 1, 1)   # primer mes del historico (el año anterior sale de 2024)
+
+def _same_day_prev_year(d):
+    return d.replace(year=d.year - 1, day=min(d.day, _cal.monthrange(d.year - 1, d.month)[1]))
+
+def build_months():
+    if not os.path.exists(DAILY_JSON):
+        print('AVISO: falta data/daily_sales.json (tools/daily_sales.py) — sin acumulado ni historico mensual')
+        return {}, None
+    with open(DAILY_JSON, encoding='utf-8') as f:
+        ds = json.load(f)
+    last = _dt.date.fromisoformat(ds['to'])
+    week_end = _dt.date.fromisocalendar(WEEKS[-1]['iso_yr'], WEEKS[-1]['iso_wk'], 7)
+    if last < week_end:
+        print(f'AVISO: daily_sales.json llega hasta {last} y la última semana acaba el {week_end}: '
+              f'el acumulado del mes se queda en {last} (ejecuta tools/daily_sales.py)')
+    out, totals = {}, {}
+    for mc in MARKET_CONFIGS:
+        m = ds['markets'].get(mc['code'])
+        if not m:
+            continue
+        cur = None if m['cur'] == 'EUR' else m['cur']
+        first = _dt.date.fromisoformat(min(m['days']))
+        daily = {}
+        for k, (u, r) in m['days'].items():
+            d = _dt.date.fromisoformat(k)
+            daily[d] = (u, r if not cur else r / fx.day_rate(cur, d))
+        def span(d1, d2):
+            if d1 < first:
+                return None, None
+            u = r = 0.0
+            d = d1
+            while d <= d2:
+                du, dr = daily.get(d, (0, 0.0)); u += du; r += dr; d += _dt.timedelta(days=1)
+            return int(u), r
+        rows = []
+        y, mo = MONTH_FROM.year, MONTH_FROM.month
+        while (y, mo) <= (last.year, last.month):
+            d1 = _dt.date(y, mo, 1)
+            d2 = min(_dt.date(y, mo, _cal.monthrange(y, mo)[1]), last)
+            u, r = span(d1, d2)
+            pu, pr = span(_same_day_prev_year(d1), _same_day_prev_year(d2))
+            row = {'m': f'{y}-{mo:02d}', 'u': u, 'r': round(r), 'pu': pu,
+                   'pr': None if pr is None else round(pr), 'd2': d2.day,
+                   'partial': d2.day < _cal.monthrange(y, mo)[1]}
+            rows.append(row)
+            t = totals.setdefault(row['m'], dict(row, u=0, r=0, pu=0, pr=0))
+            t['u'] += u; t['r'] += row['r']
+            t['pu'] = None if (t['pu'] is None or pu is None) else t['pu'] + pu
+            t['pr'] = None if (t['pr'] is None or pr is None) else t['pr'] + row['pr']
+            y, mo = (y + 1, 1) if mo == 12 else (y, mo + 1)
+        out[mc['code']] = rows
+    out['ALL'] = [totals[k] for k in sorted(totals)]
+    return out, last
+
+MONTHS, MONTHS_LAST = build_months()
+if MONTHS:
+    _m = MONTHS['ALL'][-1]
+    print(f'Mensual: {len(MONTHS["ALL"])} meses hasta {MONTHS_LAST} · mes en curso (9 mercados) {_m["u"]:,} uds '
+          f'{_m["r"]:,} € (año anterior {_m["pu"]:,} uds)')
 
 # ===========================================================
 #  6. HELPERS HTML
@@ -437,6 +545,24 @@ def yoy_span(cur, prev, cur_label, prev_label, cls_prefix, fmt_delta=None):
     cls = 'yb-up' if pct >= 0 else 'yb-dn'
     return (f'<span class="{cls_prefix} {cls}" title="Año anterior: {_r0(prev):,} {prev_label}">'
             f'<small class="yoy-lbl">YOY</small>&nbsp;{pct_txt}&nbsp;<small>({"+" if delta >= 0 else ""}{d_txt})</small></span>')
+
+def mtd_kpi(code):
+    """4º recuadro: acumulado del mes en curso hasta el último día con datos, con YOY vs mismos días del año anterior."""
+    rows = MONTHS.get(code)
+    if not rows:
+        return ''
+    m = rows[-1]
+    y, mo = map(int, m['m'].split('-'))
+    rng = f'1–{m["d2"]} {_MONTHS_ES[mo].lower()}'
+    fmt_r = lambda v: ('-' if v < 0 else '') + fr_val(abs(v), '€')
+    yoy_u = yoy_span(m['u'], m['pu'], 'uds', 'uds', 'yy-k')
+    yoy_r = yoy_span(m['r'], m['pr'], '€', '€', 'yy-k', fmt_r)
+    return f'''<div class="kpi kpi-mtd">
+        <div class="kpi-val">{m["u"]:,} <span class="kpi-unit">uds</span></div>
+        <div class="kpi-lbl">Acumulado {_MONTHS_LONG[mo]} · {rng}</div>
+        <div class="kpi-sub">Facturación: <strong>{fr_val(m["r"], "€") or "0€"}</strong></div>
+        <div class="kpi-yoy">{yoy_u}{yoy_r}<span>vs {rng} {y - 1}</span></div>
+      </div>'''
 
 def weight_badge(cat_u, total_u):
     if not total_u: return ''
@@ -573,6 +699,7 @@ def market_section(code, md, WEEKS):
         <div class="kpi-lbl">ASINs activos</div>
         <div class="kpi-sub">{len(catalog)-md["n_active"]:,} sin ventas</div>
       </div>
+      {mtd_kpi(code)}
     </div>
     <div class="chart-area">
       <div class="chart-box">
@@ -660,6 +787,11 @@ for key, entry in history.items():
     hist_data.append(row)
 
 HIST_JS = json.dumps(hist_data)
+MONTH_JS = json.dumps(MONTHS)
+MONTH_NOTE = ('Acumulado y mensual: ventas Vendor (pedidos, sin IVA) de todos los ASIN de Finocam del mercado, '
+              'IT sin los productos APS · año anterior = mismos días naturales'
+              + (f' · datos hasta {MONTHS_LAST:%d/%m/%Y}' if MONTHS_LAST else ''))
+FX_NOTE = 'Importes en €: UK, PL y SE convertidos con el tipo de referencia diario del BCE (histórico incluido)'
 MKT_JS  = json.dumps([{'code': mc['code'], 'flag': mc['flag'], 'label': mc['label'], 'cur': mc['currency']} for mc in MARKET_CONFIGS])
 _PREV_YR = WEEKS[-1]['iso_yr'] - 1
 YOY_NOTE = (f'YOY = misma semana ISO del año anterior · familias, subfamilias y mercado con el catálogo de la '
@@ -859,6 +991,22 @@ td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
 .snap-tot{{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--t2);margin-bottom:8px}}
 .sc-y{{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}}
 .sc-y .yy-k{{font-size:9px;padding:1px 5px}}
+/* ACUMULADO DEL MES */
+.kpi-mtd{{border-color:rgba(255,153,0,.45);background:linear-gradient(135deg,rgba(255,153,0,.08),var(--s2) 60%)}}
+.kpi-mtd .kpi-val{{color:var(--acc)}}
+.kpi-unit{{font-size:12px;font-weight:600;color:var(--t2);letter-spacing:0}}
+.kpi-sub strong{{color:var(--t1);font-weight:700}}
+/* HISTORICO MENSUAL */
+#month-section .hist-header{{flex-wrap:wrap}}
+.month-det{{margin-top:10px}}
+.month-det summary{{cursor:pointer;font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:6px}}
+table.month-tbl{{min-width:520px}}
+.month-tbl th{{text-align:right}}
+.month-tbl th.nh{{text-align:left;min-width:120px}}
+.month-tbl td{{padding:5px 10px;border-bottom:1px solid var(--bd2);text-align:right;font-variant-numeric:tabular-nums;font-size:11px}}
+.month-tbl td.mn{{text-align:left;color:var(--t2);font-weight:600}}
+.month-tbl tr.yr-start td{{border-top:2px solid var(--bd)}}
+.month-tbl .mpart{{font-size:9px;color:var(--acc);font-weight:600;margin-left:4px}}
 </style>
 </head>
 <body>
@@ -895,11 +1043,34 @@ td.tend{{text-align:center;padding:3px 7px;vertical-align:middle}}
   <canvas id="cvHist" height="130" style="width:100%"></canvas>
 </div>
 
+<div class="hist-section" id="month-section">
+  <div class="hist-header">
+    <span class="hist-title">📅 Histórico mensual · <span id="month-scope"></span></span>
+    <div class="hist-mkt-sel">
+      <button class="btn-hist on" id="mbtn-mkt" onclick="setMonthMode('mkt')">Mercado activo</button>
+      <button class="btn-hist" id="mbtn-all" onclick="setMonthMode('all')">Total 9 mercados</button>
+    </div>
+    <div class="hist-mkt-sel">
+      <button class="btn-hist on" id="mbtn-u" onclick="setMonthMetric('u')">Unidades</button>
+      <button class="btn-hist" id="mbtn-r" onclick="setMonthMetric('r')">Facturación €</button>
+    </div>
+  </div>
+  <canvas id="cvMonth" style="width:100%;height:240px"></canvas>
+  <details class="month-det" open>
+    <summary>Tabla mes a mes</summary>
+    <div class="wrap"><table class="month-tbl"><thead><tr>
+      <th class="nh">Mes</th><th>Unidades</th><th>YOY uds</th><th>Facturación</th><th>YOY €</th>
+    </tr></thead><tbody id="month-tb"></tbody></table></div>
+  </details>
+</div>
+
 <div class="ft">
   <span>Fuente: MerchantSpring · Vendor manufacturing view</span>
   <span>·</span><span>Semáforo vs media/día del periodo</span>
   <span>·</span><span>{YOY_NOTE}</span>
   <span>·</span><span>% = peso de categoría sobre total mercado</span>
+  <span>·</span><span>{FX_NOTE}</span>
+  <span>·</span><span>{MONTH_NOTE}</span>
 </div>
 
 <script>
@@ -913,7 +1084,7 @@ function tgTh(){{
   var r=document.documentElement,c=r.getAttribute('data-theme')||'dark';
   r.setAttribute('data-theme',c==='dark'?'light':'dark');
   document.getElementById('btnTh').textContent=c==='dark'?'☀':'🌙';
-  setTimeout(function(){{drawAllCharts(_activeMkt);drawHistChart();}},30);
+  setTimeout(function(){{drawAllCharts(_activeMkt);drawHistChart();drawMonthSection();}},30);
 }}
 
 // Tabs de mercado
@@ -928,14 +1099,14 @@ function showMkt(code){{
   // sync historico: mercado activo siempre visible, conservar extras
   if(_histMkts.indexOf(code)<0){{_histMkts=[code];}}
   // actualizar botones hist
-  document.querySelectorAll('.btn-hist').forEach(function(b){{
+  document.querySelectorAll('#hist-mkt-btns .btn-hist').forEach(function(b){{
     var c=b.id.replace('hbtn-','');
     b.classList.toggle('on',_histMkts.indexOf(c)>=0);
   }});
   // cerrar snapshot si el mercado cambió
   document.querySelectorAll('.wk-chip').forEach(function(b){{b.classList.remove('active');}});
   var ws=document.getElementById('wk-snap');if(ws)ws.style.display='none';
-  setTimeout(function(){{drawAllCharts(code);drawHistChart();}},30);
+  setTimeout(function(){{drawAllCharts(code);drawHistChart();drawMonthSection();}},30);
 }}
 
 // Collapse/expand
@@ -1250,6 +1421,97 @@ function drawHistChart(){{
   }}
 }}
 
+// Historico mensual (mercado activo o total 9 mercados)
+var MONTH_DATA={MONTH_JS};
+var _mMode='mkt',_mMetric='u';
+var _MES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function monthRows(){{return MONTH_DATA[_mMode==='all'?'ALL':_activeMkt]||[];}}
+function setMonthMode(m){{
+  _mMode=m;
+  document.getElementById('mbtn-mkt').classList.toggle('on',m==='mkt');
+  document.getElementById('mbtn-all').classList.toggle('on',m==='all');
+  drawMonthSection();
+}}
+function setMonthMetric(k){{
+  _mMetric=k;
+  document.getElementById('mbtn-u').classList.toggle('on',k==='u');
+  document.getElementById('mbtn-r').classList.toggle('on',k==='r');
+  drawMonthSection();
+}}
+function drawMonthSection(){{
+  var sc=document.getElementById('month-scope');
+  if(sc){{
+    var mi=MKT_LIST.find(function(m){{return m.code===_activeMkt;}})||{{}};
+    sc.textContent=_mMode==='all'?'Total 9 mercados':((mi.flag||'')+' '+_activeMkt);
+  }}
+  var rows=monthRows();
+  drawMonthChart(document.getElementById('cvMonth'),rows,_mMetric);
+  renderMonthTable(rows);
+}}
+function renderMonthTable(rows){{
+  var tb=document.getElementById('month-tb');
+  if(!tb)return;
+  var fR=function(v){{return fmtR(v,'€');}};
+  var h='';
+  for(var i=rows.length-1;i>=0;i--){{
+    var r=rows[i],p=r.m.split('-');
+    var part=r.partial?'<span class="mpart">1–'+r.d2+'</span>':'';
+    h+='<tr'+(p[1]==='12'&&i<rows.length-1?' class="yr-start"':'')+'>'
+      +'<td class="mn">'+_MES[+p[1]-1]+' '+p[0]+part+'</td>'
+      +'<td>'+fmtU(r.u)+'</td><td>'+yoyBadge(r.u,r.pu,'yy-k',fmtU,' uds')+'</td>'
+      +'<td>'+fR(r.r)+'</td><td>'+yoyBadge(r.r,r.pr,'yy-k',fR,'')+'</td></tr>';
+  }}
+  tb.innerHTML=h||'<tr><td colspan="5" class="mn">Sin datos mensuales</td></tr>';
+}}
+function drawMonthChart(canvas,rows,k){{
+  if(!canvas||!canvas.offsetWidth)return;
+  var dpr=window.devicePixelRatio||1;
+  var W=canvas.offsetWidth,H=canvas.offsetHeight||240;
+  canvas.width=W*dpr;canvas.height=H*dpr;
+  var ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
+  var n=rows.length;
+  if(!n)return;
+  var vals=rows.map(function(r){{return r[k]||0;}});
+  var pri=rows.map(function(r){{return r['p'+k];}});
+  var maxV=Math.max.apply(null,vals.concat(pri.filter(function(p){{return p!=null;}})))*1.12||1;
+  var pad={{l:46,r:10,t:20,b:42}};
+  var cw=(W-pad.l-pad.r)/n,bw=Math.max(4,Math.min(34,cw*0.62)),ch=H-pad.t-pad.b;
+  var t3=getCSS('--t3'),t2=getCSS('--t2'),bd=getCSS('--bd'),acc=getCSS('--acc');
+  var fmt=function(v){{return k==='r'?fmtR(v,'€'):(v>=1000?(v/1000).toFixed(1)+'k':String(Math.round(v)));}};
+  ctx.strokeStyle=bd;ctx.lineWidth=.5;
+  for(var gi=0;gi<=4;gi++){{
+    var gy=pad.t+ch/4*gi;
+    ctx.beginPath();ctx.moveTo(pad.l,gy);ctx.lineTo(W-pad.r,gy);ctx.stroke();
+    if(gi<4){{ctx.fillStyle=t3;ctx.font='9px sans-serif';ctx.textAlign='right';ctx.fillText(fmt(maxV/4*(4-gi)),pad.l-4,gy+3);}}
+  }}
+  rows.forEach(function(r,i){{
+    var x=pad.l+cw*i+(cw-bw)/2,v=vals[i],bh=v>0?v/maxV*ch:0,y=pad.t+ch-bh,last=i===n-1;
+    ctx.fillStyle=last?acc:'rgba(255,153,0,.5)';
+    ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,bw,bh,2);else ctx.rect(x,y,bw,bh);ctx.fill();
+    var p=pri[i];
+    if(p!=null&&p>0){{
+      var py=pad.t+ch-p/maxV*ch;
+      ctx.strokeStyle=t2;ctx.lineWidth=1.5;ctx.setLineDash([3,2]);
+      ctx.beginPath();ctx.moveTo(x-3,py);ctx.lineTo(x+bw+3,py);ctx.stroke();ctx.setLineDash([]);
+    }}
+    if(cw>=34&&v>0){{ctx.fillStyle=last?acc:t2;ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.fillText(fmt(v),x+bw/2,y-3);}}
+    var mo=+r.m.slice(5);
+    ctx.fillStyle=t3;ctx.font=(mo===1?'bold ':'')+'8px sans-serif';ctx.textAlign='center';
+    ctx.fillText(_MES[mo-1].slice(0,cw<24?1:3)+(r.partial?'*':''),x+bw/2,H-pad.b+10);
+    if(mo===1||i===0)ctx.fillText(r.m.slice(0,4),x+bw/2,H-pad.b+20);
+    var yy=yoyPct(v,p);
+    if(yy&&cw>=28){{
+      ctx.fillStyle=yy.cls==='yb-up'?getCSS('--yb-up-c'):(yy.cls==='yb-dn'?getCSS('--yb-dn-c'):t3);
+      ctx.font='bold 8px sans-serif';ctx.fillText(yy.txt,x+bw/2,H-pad.b+32);
+    }}
+  }});
+  ctx.font='9px sans-serif';
+  var lt='Año anterior (mismos días)'+(rows[n-1].partial?' · * mes en curso':''),lx=W-pad.r-ctx.measureText(lt).width-20;
+  ctx.strokeStyle=t2;ctx.lineWidth=1.5;ctx.setLineDash([3,2]);
+  ctx.beginPath();ctx.moveTo(lx,8);ctx.lineTo(lx+14,8);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle=t3;ctx.textAlign='left';ctx.fillText(lt,lx+18,11);
+}}
+
 // Week snapshot para semanas archivadas
 function closeWkSnap(){{
   var ws=document.getElementById('wk-snap');
@@ -1303,7 +1565,7 @@ window.addEventListener('load',function(){{
   showMkt('{default_mkt}');
   setTimeout(drawHistChart,60);
 }});
-window.addEventListener('resize',function(){{drawAllCharts(_activeMkt);drawHistChart();}});
+window.addEventListener('resize',function(){{drawAllCharts(_activeMkt);drawHistChart();drawMonthSection();}});
 </script>
 </body>
 </html>'''

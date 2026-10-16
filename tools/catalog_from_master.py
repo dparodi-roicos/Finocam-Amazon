@@ -48,6 +48,15 @@ SUB2FAM = {
 }
 
 
+def subfamilia(sub, desc, any_):
+    """Subfamilia del dashboard. Los planificadores anuales de 2025, 2026 y alguno de 2027 (PLANIFICADOR SVV/MV...)
+    vienen en el Màster como «Agenda Anual» mientras que sus equivalentes de 2027 ya van en «Planificador Anual»:
+    se pasan a Planificadores para que la familia sea comparable entre temporadas."""
+    if sub == 'Agenda Anual' and desc.upper().startswith('PLANIFICADOR'):
+        return 'Planificador sin Fechar' if any_ == 'NOCAD' else 'Planificador Anual'
+    return sub
+
+
 def anualidad(v):
     if isinstance(v, float) and v.is_integer():
         v = int(v)
@@ -65,7 +74,7 @@ def main(path):
         if re.fullmatch(r'B0[0-9A-Z]{8}', asin):
             rows.append((asin, anualidad(r[4]), str(r[9] or '').strip(), str(r[10] or '').strip()))
     for fname, years in SEASONS.items():
-        catalog, unknown, skipped = {}, Counter(), Counter()
+        catalog, unknown, skipped, moved = {}, Counter(), Counter(), []
         for asin, any_, sub, desc in rows:
             if asin in catalog:
                 continue
@@ -75,6 +84,10 @@ def main(path):
             if sub not in SUB2FAM:
                 unknown[sub] += 1
                 continue
+            new_sub = subfamilia(sub, desc, any_)
+            if new_sub != sub:
+                moved.append(f'{asin} {desc} ({sub} -> {new_sub})')
+                sub = new_sub
             up = desc.upper()
             col = 'Moniquilla' if 'MONIQUILLA' in up else ('Talkual' if 'TALKUAL' in up else None)
             catalog[asin] = {'familia': SUB2FAM[sub], 'sub': sub, 'any': any_, 'desc': desc, 'col': col}
@@ -86,6 +99,8 @@ def main(path):
         print(f'{len(catalog)} ASIN -> {out}')
         print('  Por familia:', dict(Counter(v['familia'] for v in catalog.values()).most_common()))
         print('  Anualidades descartadas:', dict(skipped))
+        if moved:
+            print(f'  Recategorizados respecto al Màster ({len(moved)}):\n    ' + '\n    '.join(moved))
 
 
 if __name__ == '__main__':
